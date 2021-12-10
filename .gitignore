@@ -127,3 +127,14 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# pdf
+*.pdf
+
+# png 
+*.png
+
+# experiments folder
+experiments/
+
+# lightning folder
