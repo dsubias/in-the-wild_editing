@@ -9,9 +9,9 @@ checkpoint: ~
 # data
 dataset: material
 data_augmentation: True
-data_root: /home/johanna/Documents/rendering_materials/renders/datasets_allshapes/renders_by_geom_ldr/network_dataset/
+data_root: /media/raid/dsubias/data/rendering_materials/renders/datasets_allshapes/renders_by_geom_ldr/network_dataset/
 #data_root: /home/johanna/Documents/rendering_materials/renders/datasets_allshapes/network_dataset/
-data_root: /home/jdelanoy/rendering_materials/renders/datasets_allshapes/renders_by_geom_ldr/network_dataset/
+data_root: /media/raid/dsubias/data/rendering_materials/renders/datasets_allshapes/renders_by_geom_ldr/network_dataset/
 #data_root: /Users/delanoy/Documents/postdoc/project1_material_networks/dataset/renders_by_geom_ldr/
 crop_size: 480
 image_size: 256
@@ -42,11 +42,11 @@ n_attr_deconv: 1 #in how many deconv layer add the attribute:0 = no attribute, 1
 n_concat_normals: 4
 #other
 attrs: [glossy]
-faderNet_checkpoint: experiments/final_step1_glossy/checkpoints/G_80000.pth.tar
+faderNet_checkpoint: lightning_logs/version_6/checkpoints/epoch=399-step=105199.ckpt
 
 
 # training (FaderNet)
-batch_size: 16
+batch_size: 32
 beta1: 0.9
 beta2: 0.999
 g_lr: 0.0001

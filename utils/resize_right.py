@@ -6,6 +6,7 @@ from utils import interp_methods
 class NoneClass:
     pass
 
+
 try:
     import torch
     from torch import nn
@@ -20,14 +21,14 @@ try:
 except ImportError:
     warnings.warn('No Numpy found, will work only with PyTorch')
     numpy = None
-    
+
 
 if numpy is None and torch is None:
     raise ImportError("Must have either Numpy or PyTorch but both not found")
 
 
 def resize(input, scale_factors=None, out_shape=None,
-           interp_method=interp_methods.cubic, support_sz=None, 
+           interp_method=interp_methods.cubic, support_sz=None,
            antialiasing=True):
     # get properties of the input tensor
     in_shape, n_dims = input.shape, input.ndim
@@ -48,14 +49,15 @@ def resize(input, scale_factors=None, out_shape=None,
                                        for dim in sorted(range(n_dims),
                                        key=lambda ind: scale_factors[ind])
                                        if scale_factors[dim] != 1.]
-    
+
     # unless support size is specified by the user, it is an attribute
     # of the interpolation method
     if support_sz is None:
         support_sz = interp_method.support_sz
-        
+
     # when using pytorch, we need to know what is the input tensor device
     if fw is torch:
+
         device = input.device
 
     # output begins identical to input and changes with each iteration
@@ -92,13 +94,13 @@ class ResizeLayer(nnModuleWrapped):
         # scream if both missing
         scale_factors, out_shape = set_scale_and_out_sz(in_shape, out_shape,
                                                         scale_factors, fw)
-        
+
         # unless support size is specified by the user, it is an attribute
         # of the interpolation method
         if support_sz is None:
             support_sz = interp_method.support_sz
-        
-        self.n_dims = len(in_shape)       
+
+        self.n_dims = len(in_shape)
 
         # sort indices of dimensions according to scale of each dimension.
         # since we are going dim by dim this is efficient
@@ -132,7 +134,8 @@ class ResizeLayer(nnModuleWrapped):
     def forward(self, input):
         # output begins identical to input and changes with each iteration
         output = input
-
+        self.field_of_view.to(output.device)
+        self.weights.to(output.device)
         for (dim, scale_factor), field_of_view, weights in zip(
                 self.sorted_filtered_dims_and_scales,
                 self.field_of_view,
@@ -145,19 +148,20 @@ class ResizeLayer(nnModuleWrapped):
 
 
 def prepare_weights_and_field_of_view_1d(dim, scale_factor, in_sz, out_sz,
-                                         interp_method, support_sz, 
+                                         interp_method, support_sz,
                                          antialiasing, fw, eps, device=None):
     # If antialiasing is taking place, we modify the window size and the
     # interpolation method (see inside function)
     interp_method, cur_support_sz = apply_antialiasing_if_needed(
-                                                             interp_method,
-                                                             support_sz,
-                                                             scale_factor,
-                                                             antialiasing)
+        interp_method,
+        support_sz,
+        scale_factor,
+        antialiasing)
 
     # STEP 1- PROJECTED GRID: The non-integer locations of the projection of
     # output pixel locations to the input tensor
-    projected_grid = get_projected_grid(in_sz, out_sz, scale_factor, fw, device)
+    projected_grid = get_projected_grid(
+        in_sz, out_sz, scale_factor, fw, device)
 
     # STEP 2- FIELDS OF VIEW: for each output pixels, map the input pixels
     # that influence it
@@ -202,6 +206,7 @@ def apply_weights(input, field_of_view, weights, dim, n_dims, fw):
 
     # now we simply multiply the weights with the neighbors, and then sum
     # along the field of view, to get a single value per out pixel
+
     tmp_output = (neighbors * tmp_weights).sum(1)
 
     # we transpose back the resized dim to its original position
@@ -251,10 +256,10 @@ def set_scale_and_out_sz(in_shape, out_shape, scale_factors, fw):
 def get_projected_grid(in_sz, out_sz, scale_factor, fw, device=None):
     # we start by having the ouput coordinates which are just integer locations
     out_coordinates = fw.arange(out_sz)
-    
+
     # if using torch we need to match the grid tensor device to the input device
     out_coordinates = fw_set_device(out_coordinates, device, fw)
-        
+
     # This is projecting the ouput pixel locations in 1d to the input tensor,
     # as non-integer locations.
     # the following fomrula is derived in the paper
@@ -281,7 +286,7 @@ def get_field_of_view(projected_grid, cur_support_sz, in_sz, fw, eps):
     # (which would require enlarging the input tensor)
     mirror = fw_cat((fw.arange(in_sz), fw.arange(in_sz - 1, -1, step=-1)), fw)
     field_of_view = mirror[fw.remainder(field_of_view, mirror.shape[0])]
-    field_of_view = fw_set_device(field_of_view,projected_grid.device, fw)
+    field_of_view = fw_set_device(field_of_view, projected_grid.device, fw)
     return field_of_view
 
 
@@ -331,7 +336,8 @@ def fw_swapaxes(x, ax_1, ax_2, fw):
         return fw.swapaxes(x, ax_1, ax_2)
     else:
         return x.transpose(ax_1, ax_2)
-    
+
+
 def fw_set_device(x, device, fw):
     if fw is numpy:
         return x
