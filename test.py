@@ -1,13 +1,16 @@
+import torchvision.utils as tvutils
 import argparse
 import os
+import re
 
-#from agents.faderNet import FaderNet
+# from agents.faderNet import FaderNet
 from utils.config import *
 from agents import *
 from datasets.material import *
 from torch.utils.data import DataLoader
 from torchvision.utils import make_grid
 import pytorch_lightning as pl
+from utils.im_util import denorm
 
 # Set resource usage
 torch.set_num_threads(8)
@@ -19,7 +22,7 @@ def main():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument(
         '--config',
-        default='configs/train_fadernet_withnormals.yaml',
+        default='configs/train_fadernet_withnormals_org.yaml',
         help='The path of configuration file in yaml format')
     args = arg_parser.parse_args()
     config = process_config(args.config)
@@ -36,21 +39,18 @@ def main():
                              config.data_augmentation,
                              mask_input_bg=config.mask_input_bg)
 
-    val_loader = data_loader.val_dataloader()
-    train_loader = data_loader.train_dataloader()
-    test_loader = data_loader.test_dataloader()
+    test_loader = data_loader.val_dataloader()
+    path = 'lightning_logs/generator_1_finish/checkpoints/epoch=399-step=105199.ckpt'
+    checkpoint = torch.load(path, map_location=model.device)
 
-    train_batches = data_loader.train_iterations
-    val_batches = data_loader.val_iterations
+    model.load_state_dict(checkpoint['state_dict'])
 
-    trainer = pl.Trainer(check_val_every_n_epoch=config.sample_step,
-                         devices=[1],
-                         accelerator="gpu",
-                         limit_train_batches=train_batches,
-                         limit_val_batches=val_batches,
-                         max_epochs=config.max_epoch,
-                         enable_checkpointing=True)
-    trainer.fit(model, train_loader, val_loader)
+    max_val = 5.0
+    i = 0
+    for batch in iter(test_loader):
+        path = 'test_1_{}.png'.format(i)
+        i += 1
+        model.compute_sample_grid(batch, max_val, path, 0)
 
 
 if __name__ == '__main__':

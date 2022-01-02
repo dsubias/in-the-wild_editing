@@ -1,3 +1,4 @@
+from numpy.core.fromnumeric import shape
 import torch
 import torch.nn as nn
 from torchsummary import summary
@@ -8,6 +9,7 @@ from models.blocks import *
 
 VERSION = "faderNet"  # "pix2pixHD"
 LD_MULT_BN = False  # unused option, do not change
+
 
 antialiasing = True
 interpolation = interp_methods.cubic
@@ -23,7 +25,7 @@ def build_disc_layers(conv_dim=64, n_layers=6, max_dim=512, in_channels=3, activ
     out_channels = conv_dim
 
     for i in range(n_layers):
-        #print(i, in_channels,out_channels)
+        # print(i, in_channels,out_channels)
         enc_layer = [ConvReluBn(nn.Conv2d(in_channels, out_channels, 4, 2, 1, bias=bias,
                                 padding_mode='reflect'), activation, normalization=normalization if i > 0 else 'none')]
         if dropout > 0:
@@ -51,13 +53,13 @@ def build_encoder_layers(conv_dim=64, n_layers=6, max_dim=512, im_channels=3, ac
     in_channels = im_channels
     out_channels = conv_dim
     for i in range(n_layers):
-        #print(i, in_channels,out_channels)
+        # print(i, in_channels,out_channels)
         enc_layer = [ConvReluBn(nn.Conv2d(in_channels, out_channels, kernel_sizes[i], 2 if (i > 0 or not first_conv) else 1, (
             kernel_sizes[i]-1)//2, bias=bias, padding_mode='reflect'), activation, normalization=normalization)]  # PIX2PIX stride 1 in first conv
         if (i >= n_layers-1-vgg_like and i < n_layers-1):
             enc_layer += [ConvReluBn(nn.Conv2d(out_channels, out_channels, 3, 1,
                                      1, bias=bias, padding_mode='reflect'), activation, normalization)]
-            #enc_layer += [ConvReluBn(nn.Conv2d(out_channels, out_channels, 3, 1, 1,bias=bias),activation,normalization)]
+            # enc_layer += [ConvReluBn(nn.Conv2d(out_channels, out_channels, 3, 1, 1,bias=bias),activation,normalization)]
         if dropout > 0:
             enc_layer.append(nn.Dropout(dropout))
         layers.append(nn.Sequential(*enc_layer))
@@ -82,12 +84,12 @@ class Encoder(nn.Module):
 
     # return [encodings,bneck]
     def encode(self, x):
+
         # Encoder
         x_encoder = []
         for block in self.encoder:
             x = block(x)
             x_encoder.append(x)
-
         bn = []
         # Bottleneck
         for block in self.bottleneck:
@@ -126,6 +128,7 @@ def build_decoder_layers(conv_dim=64, n_layers=6, max_dim=512, im_channels=3, sk
     decoder = nn.ModuleList()
     # PIX2PIX do no put the very last intermediate convolutions (one less stride)
     shift = 0 if not first_conv else 1
+
     for i in reversed(range(shift, n_layers)):
         # size of inputs/outputs
         dec_out = int(min(max_dim, conv_dim * 2 ** (i-1)))
@@ -139,6 +142,7 @@ def build_decoder_layers(conv_dim=64, n_layers=6, max_dim=512, im_channels=3, sk
             dec_in = dec_in + attr_dim  # concatenate attribute
         # skip connection: n_branches-1 or 1 feature map
         if i >= n_layers - 1 - skip_connections and i != n_layers-1:
+
             dec_in = dec_in + max(1, n_branches-1)*enc_size
         if (i == shift and VERSION == "faderNet"):
             dec_out = conv_dim // 4  # last conv is of dim dim / 4
@@ -158,6 +162,7 @@ def build_decoder_layers(conv_dim=64, n_layers=6, max_dim=512, im_channels=3, sk
     # PIX2PIX last conv has kernel 7, padding 3
     last_conv = nn.ConvTranspose2d(
         dec_out, im_channels, last_kernel, 1, last_kernel//2, bias=True)
+
     return decoder, last_conv
 
 
@@ -168,6 +173,7 @@ class Unet(nn.Module):
         super(Unet, self).__init__()
         self.n_layers = n_layers
         self.skip_connections = min(skip_connections, n_layers - 1)
+
         self.up = nn.Upsample(
             scale_factor=2, mode='bilinear', align_corners=False)
         self.resize_layers = []
@@ -189,14 +195,16 @@ class Unet(nn.Module):
 
     # return [encodings,bneck]
     def encode(self, x):
+
         return self.encoder.encode(x)
 
     def decode(self, bneck, encodings):
         out = bneck
+
         for i, dec_layer in enumerate(self.decoder):
             out = self.add_skip_connection(i, out, encodings)
-            #out = dec_layer(self.up(out))
-            #out = dec_layer(resize_right.resize(out, scale_factors=2))
+            # out = dec_layer(self.up(out))
+            # out = dec_layer(resize_right.resize(out, scale_factors=2))
             out = dec_layer(self.resize_layers[self.n_layers-i-1])
         x = self.last_conv(out)
         x = torch.tanh(x)
@@ -244,10 +252,13 @@ class FaderNetGenerator(Unet):
     def decode(self, a, bneck, encodings):
         bneck = self.decoder_bottlenck(bneck, a)
         out = bneck
+
         for i, dec_layer in enumerate(self.decoder):
+
             out = self.add_attribute(i, out, a)
             out = self.add_skip_connection(i, out, encodings)
             out = dec_layer(self.up(out))
+
         x = self.last_conv(out)
         x = torch.tanh(x)
 
@@ -288,9 +299,9 @@ class FaderNetGeneratorWithNormals(FaderNetGenerator):
         map_pyramid = [map]
 
         for i in range(n_levels-1):
-            #map_pyramid.insert(0,nn.functional.interpolate(map_pyramid[0], mode='bilinear', align_corners=False, scale_factor=0.5))
+            # map_pyramid.insert(0,nn.functional.interpolate(map_pyramid[0], mode='bilinear', align_corners=False, scale_factor=0.5))
             map_pyramid.insert(0, self.resize_normals[i](map))
-            #map_pyramid.insert(0,resize_right.resize(map_pyramid[0], scale_factors=0.5, interp_method=interp_methods.cubic,antialiasing=True))
+            # map_pyramid.insert(0,resize_right.resize(map_pyramid[0], scale_factors=0.5, interp_method=interp_methods.cubic,antialiasing=True))
         return map_pyramid
 
     # adding the normal map at the right scale if needed
@@ -319,7 +330,7 @@ class FaderNetGeneratorWithNormals(FaderNetGenerator):
         out = bneck
         for i, dec_layer in enumerate(self.decoder):
             out = self.add_skip_connection(i, out, encodings)
-            #out = self.up(out)
+            # out = self.up(out)
             out = resize_right.resize(out, scale_factors=2)
             out = self.add_attribute(i, out, a)
             out = self.add_multiscale_map(
@@ -455,6 +466,51 @@ def FC_layers(in_dim, fc_dim, out_dim, tanh):
 
 
 # LD
+class Latent_Discriminator_Layer(nn.Module):
+    def __init__(self, n_layer=0, image_size=128, max_dim=512, attr_dim=10, im_channels=3, conv_dim=64, fc_dim=1024, n_layers=5, skip_connections=2, vgg_like=0, normalization='instance', first_conv=False):
+        super(Latent_Discriminator_Layer, self).__init__()
+        layers = []
+        self.n_bnecks = 3
+        n_dis_layers = int(np.log2(image_size))
+        layers = build_encoder_layers(conv_dim, n_dis_layers, max_dim, im_channels,
+                                      normalization=normalization, activation='leaky_relu', dropout=0.3, first_conv=first_conv)
+        # NEW change first conv to get 3 times bigger input
+        if LD_MULT_BN:
+            layers[n_layers-skip_connections][0].conv = nn.Conv2d(layers[n_layers-skip_connections][0].conv.in_channels*self.n_bnecks, layers[n_layers-skip_connections][0].conv.out_channels,
+                                                                  layers[n_layers-skip_connections][0].conv.kernel_size, layers[n_layers-skip_connections][0].conv.stride, 1, bias=normalization != 'batch', padding_mode='reflect')
+        bias = normalization != 'batch'
+        enc_layer = [ConvReluBn(nn.Conv2d(im_channels, im_channels, 4, 2, 1, bias=bias,
+                                padding_mode='reflect'), 'leaky_relu', normalization=normalization)]
+
+        enc_layer.append(nn.Dropout(0.3))
+        self.conv = nn.Sequential(*enc_layer)  # solo una convolucion !!!!!
+
+        self.bottleneck = nn.ModuleList([ResidualBlock(
+            im_channels, im_channels, 'relu', normalization, bias=bias) for i in range(2)])
+
+        self.pool = nn.AvgPool2d(1 if not first_conv else 2)
+        # min(max_dim, conv_dim * 2 ** (n_dis_layers - 1))
+        out_conv = im_channels * (conv_dim // 2**n_layer)**2
+        self.fc_att = FC_layers(out_conv, fc_dim, attr_dim, True)
+
+    def forward(self, x, bn_list):
+
+        for block in self.bottleneck:
+
+            x = block(x)
+
+        if LD_MULT_BN:
+
+            x = torch.cat(bn_list[-self.n_bnecks:], dim=1)
+
+        y = self.conv(x)
+        y = self.pool(y)
+        y = y.view(y.size()[0], -1)
+        logit_att = self.fc_att(y)
+
+        return logit_att
+
+
 class Latent_Discriminator(nn.Module):
     def __init__(self, image_size=128, max_dim=512, attr_dim=10, im_channels=3, conv_dim=64, fc_dim=1024, n_layers=5, skip_connections=2, vgg_like=0, normalization='instance', first_conv=False):
         super(Latent_Discriminator, self).__init__()
@@ -468,18 +524,24 @@ class Latent_Discriminator(nn.Module):
             layers[n_layers-skip_connections][0].conv = nn.Conv2d(layers[n_layers-skip_connections][0].conv.in_channels*self.n_bnecks, layers[n_layers-skip_connections][0].conv.out_channels,
                                                                   layers[n_layers-skip_connections][0].conv.kernel_size, layers[n_layers-skip_connections][0].conv.stride, 1, bias=normalization != 'batch', padding_mode='reflect')
 
-        self.conv = nn.Sequential(*layers[n_layers-skip_connections:])
+        self.conv = nn.Sequential(
+            *(layers[n_layers-0:]))  # solo una convolucion !!!!!
+
         self.pool = nn.AvgPool2d(1 if not first_conv else 2)
         out_conv = min(max_dim, conv_dim * 2 ** (n_dis_layers - 1))
         self.fc_att = FC_layers(out_conv, fc_dim, attr_dim, True)
 
     def forward(self, x, bn_list):
+
         if LD_MULT_BN:
+
             x = torch.cat(bn_list[-self.n_bnecks:], dim=1)
+
         y = self.conv(x)
         y = self.pool(y)
         y = y.view(y.size()[0], -1)
         logit_att = self.fc_att(y)
+
         return logit_att
 
 
@@ -569,7 +631,7 @@ if __name__ == '__main__':
                     skip_connections=0, max_dim=512, vgg_like=True)
 
     print(gen)
-    #summary(gen, [(3, 128, 128), (5,)], device='cpu')
+    # summary(gen, [(3, 128, 128), (5,)], device='cpu')
 
     # dis = Discriminator(image_size=128, max_dim=512, attr_dim=5,conv_dim=32,n_layers=7)
     # print(dis)
