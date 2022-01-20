@@ -14,9 +14,50 @@ LD_MULT_BN = False  # unused option, do not change
 antialiasing = True
 interpolation = interp_methods.cubic
 
+
+class ConvGRUCell(nn.Module):
+    def __init__(self, n_attrs, in_dim, out_dim, kernel_size=3):
+        super(ConvGRUCell, self).__init__()
+        self.n_attrs = n_attrs
+        self.upsample = nn.ConvTranspose2d(
+            in_dim * 2 + n_attrs, out_dim, 4, 2, 1, bias=False)
+        self.reset_gate = nn.Sequential(
+            nn.Conv2d(in_dim + out_dim, out_dim, kernel_size,
+                      1, (kernel_size - 1) // 2, bias=False),
+            nn.BatchNorm2d(out_dim),
+            nn.Sigmoid()
+        )
+        self.update_gate = nn.Sequential(
+            nn.Conv2d(in_dim + out_dim, out_dim, kernel_size,
+                      1, (kernel_size - 1) // 2, bias=False),
+            nn.BatchNorm2d(out_dim),
+            nn.Sigmoid()
+        )
+        self.hidden = nn.Sequential(
+            nn.Conv2d(in_dim + out_dim, out_dim, kernel_size,
+                      1, (kernel_size - 1) // 2, bias=False),
+            nn.BatchNorm2d(out_dim),
+            nn.Tanh()
+        )
+
+    def forward(self, input, old_state, attr):
+        # print(input.shape)
+        n, _, h, w = old_state.size()
+        attr = attr.view((n, self.n_attrs, 1, 1)).expand(
+            (n, self.n_attrs, h, w))
+
+        state_hat = self.upsample(torch.cat([old_state, attr], 1))
+        r = self.reset_gate(torch.cat([input, state_hat], dim=1))
+
+        z = self.update_gate(torch.cat([input, state_hat], dim=1))
+        new_state = r * state_hat
+        hidden_info = self.hidden(torch.cat([input, new_state], dim=1))
+        output = (1-z) * state_hat + z * hidden_info
+
+        return output, new_state
+
+
 # conv layers of the discriminator
-
-
 def build_disc_layers(conv_dim=64, n_layers=6, max_dim=512, in_channels=3, activation='relu', normalization='batch', dropout=0):
 
     # use bias only if we do not use a normalization layer
@@ -82,7 +123,6 @@ class Encoder(nn.Module):
         self.bottleneck = nn.ModuleList([ResidualBlock(
             b_dim, b_dim, activation, normalization, bias=bias) for i in range(n_bottlenecks)])
 
-    # return [encodings,bneck]
     def encode(self, x):
 
         # Encoder
@@ -90,11 +130,14 @@ class Encoder(nn.Module):
         for block in self.encoder:
             x = block(x)
             x_encoder.append(x)
+
         bn = []
         # Bottleneck
         for block in self.bottleneck:
+
             x = block(x)
             bn.append(x)
+
         return x_encoder, x, bn
 
 # trial to preprocess the attribute (a few FC layers), not used in the end
@@ -130,6 +173,7 @@ def build_decoder_layers(conv_dim=64, n_layers=6, max_dim=512, im_channels=3, sk
     shift = 0 if not first_conv else 1
 
     for i in reversed(range(shift, n_layers)):
+
         # size of inputs/outputs
         dec_out = int(min(max_dim, conv_dim * 2 ** (i-1)))
         dec_in = min(max_dim, conv_dim * 2 ** (i))
@@ -142,7 +186,7 @@ def build_decoder_layers(conv_dim=64, n_layers=6, max_dim=512, im_channels=3, sk
             dec_in = dec_in + attr_dim  # concatenate attribute
         # skip connection: n_branches-1 or 1 feature map
         if i >= n_layers - 1 - skip_connections and i != n_layers-1:
-
+            # print(i)
             dec_in = dec_in + max(1, n_branches-1)*enc_size
         if (i == shift and VERSION == "faderNet"):
             dec_out = conv_dim // 4  # last conv is of dim dim / 4
@@ -162,13 +206,13 @@ def build_decoder_layers(conv_dim=64, n_layers=6, max_dim=512, im_channels=3, sk
     # PIX2PIX last conv has kernel 7, padding 3
     last_conv = nn.ConvTranspose2d(
         dec_out, im_channels, last_kernel, 1, last_kernel//2, bias=True)
-
+    # exit()
     return decoder, last_conv
 
 
 # a simple unet (encoder decoder)
 class Unet(nn.Module):
-    def __init__(self, conv_dim=64, n_layers=5, max_dim=1024, im_channels=3, skip_connections=2, vgg_like=0, normalization='instance', first_conv=False, n_bottlenecks=2, img_size=128, batch_size=32, device='cpu'):
+    def __init__(self, conv_dim=64, n_layers=5, max_dim=1024, im_channels=3, skip_connections=2, vgg_like=0, normalization='instance', first_conv=False, n_bottlenecks=2, img_size=128, batch_size=32, device='cpu', use_stu=True):
 
         super(Unet, self).__init__()
         self.n_layers = n_layers
@@ -187,9 +231,21 @@ class Unet(nn.Module):
         self.decoder, self.last_conv = build_decoder_layers(
             conv_dim, n_layers, max_dim, 3, skip_connections=skip_connections, vgg_like=vgg_like, normalization=normalization)
 
+        stu_kernel_size = 3
+        self.n_attrs = 1
+        self.use_stu = use_stu
+
+        if use_stu:
+            self.stu = nn.ModuleList()
+            for i in reversed(range(self.n_layers - 1 - self.skip_connections, self.n_layers - 1)):
+                self.stu.append(ConvGRUCell(
+                    self.n_attrs, conv_dim * 2 ** i, conv_dim * 2 ** i, stu_kernel_size))
+
     # adding the skip connection if needed
     def add_skip_connection(self, i, out, encodings):
+
         if 0 < i <= self.skip_connections:
+
             out = torch.cat([out, encodings[-(i+1)]], dim=1)
         return out
 
@@ -219,10 +275,10 @@ class Unet(nn.Module):
 
 # G1 without normals (faderNet)
 class FaderNetGenerator(Unet):
-    def __init__(self, conv_dim=64, n_layers=5, max_dim=1024, im_channels=3, skip_connections=2, vgg_like=0, attr_dim=1, n_attr_deconv=1, normalization='instance', first_conv=False, n_bottlenecks=2, img_size=128, batch_size=32, device='cpu'):
+    def __init__(self, conv_dim=64, n_layers=5, max_dim=1024, im_channels=3, skip_connections=2, vgg_like=0, attr_dim=1, n_attr_deconv=1, normalization='instance', first_conv=False, n_bottlenecks=2, img_size=128, batch_size=32, device='cpu', use_stu=False):
 
         super(FaderNetGenerator, self).__init__(conv_dim, n_layers, max_dim, im_channels,
-                                                skip_connections, vgg_like, normalization, first_conv, n_bottlenecks, img_size, batch_size, device=device)
+                                                skip_connections, vgg_like, normalization, first_conv, n_bottlenecks, img_size, batch_size, device=device, use_stu=use_stu)
         self.attr_dim = attr_dim
         self.n_attr_deconv = n_attr_deconv
 
@@ -245,19 +301,48 @@ class FaderNetGenerator(Unet):
 
     # go through decoder's bottleneck  (with attribute)
     def decoder_bottlenck(self, bneck, a):
+
         for block in self.bottleneck:
+
             bneck = block(bneck, a)
+
         return bneck
 
     def decode(self, a, bneck, encodings):
         bneck = self.decoder_bottlenck(bneck, a)
         out = bneck
 
-        for i, dec_layer in enumerate(self.decoder):
+        # Previous implementation
 
-            out = self.add_attribute(i, out, a)
-            out = self.add_skip_connection(i, out, encodings)
-            out = dec_layer(self.up(out))
+        # for i, dec_layer in enumerate(self.decoder):
+
+        # out = self.add_attribute(i, out, a)  # solo en la primera salida
+        #out = self.add_skip_connection(i, out, encodings)
+        #out = dec_layer(self.up(out))
+
+        #out = bneck
+        # STU Cells
+        n, _, h, w = out.size()
+        attr = a.view((n, self.n_attrs, 1, 1)).expand((n, self.n_attrs, h, w))
+
+        out = self.decoder[0](self.up(torch.cat([out, attr], dim=1)))
+        stu_state = bneck
+
+        # propagate shortcut layers
+        for i in range(1, self.skip_connections + 1):
+            if self.use_stu:
+                stu_out, stu_state = self.stu[i -
+                                              1](encodings[-(i+1)], stu_state, a)
+
+                out = torch.cat([out, stu_out], dim=1)
+                out = self.decoder[i](self.up(out))
+            else:
+                out = torch.cat([out, encodings[-(i+1)]], dim=1)
+                out = self.decoder[i](self.up(out))
+
+        # propagate non-shortcut layers
+        for i in range(self.skip_connections + 1, self.n_layers):
+            out = self.decoder[i](self.up(out))
 
         x = self.last_conv(out)
         x = torch.tanh(x)
@@ -266,7 +351,7 @@ class FaderNetGenerator(Unet):
 
     def forward(self, x, a):
         # propagate encoder layers
-        encodings, z, _ = self.encode(x)
+        encodings, z, _ = self.encode(x, a)
         return self.decode(a, z, encodings)
 
 # G1 (faderNet with normals)
@@ -480,13 +565,13 @@ class Latent_Discriminator_Layer(nn.Module):
                                                                   layers[n_layers-skip_connections][0].conv.kernel_size, layers[n_layers-skip_connections][0].conv.stride, 1, bias=normalization != 'batch', padding_mode='reflect')
         bias = normalization != 'batch'
         enc_layer = [ConvReluBn(nn.Conv2d(im_channels, im_channels, 4, 2, 1, bias=bias,
-                                padding_mode='reflect'), 'leaky_relu', normalization=normalization)]
+                                          padding_mode='reflect'), 'leaky_relu', normalization=normalization)]
 
         enc_layer.append(nn.Dropout(0.3))
         self.conv = nn.Sequential(*enc_layer)  # solo una convolucion !!!!!
 
         self.bottleneck = nn.ModuleList([ResidualBlock(
-            im_channels, im_channels, 'relu', normalization, bias=bias) for i in range(2)])
+            im_channels, im_channels, 'relu', normalization, bias=bias) for i in range(0)])
 
         self.pool = nn.AvgPool2d(1 if not first_conv else 2)
         # min(max_dim, conv_dim * 2 ** (n_dis_layers - 1))

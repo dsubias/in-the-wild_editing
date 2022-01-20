@@ -48,7 +48,7 @@ def main():
     max_val = 5.0
     i = 0
     for batch in iter(test_loader):
-        path = 'test_1_{}.png'.format(i)
+        path = 'test_{}.png'.format(i)
         i += 1
         model.compute_sample_grid(batch, max_val, path, 0)
 

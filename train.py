@@ -19,7 +19,7 @@ def main():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument(
         '--config',
-        default='configs/train_fadernet_withnormals.yaml',
+        default='configs/train_fadernet_new.yaml',
         help='The path of configuration file in yaml format')
     args = arg_parser.parse_args()
     config = process_config(args.config)
@@ -44,9 +44,10 @@ def main():
     val_batches = data_loader.val_iterations
 
     trainer = pl.Trainer(check_val_every_n_epoch=config.sample_step,
-                         devices=[1],
-                         accelerator="gpu",
-                         limit_train_batches=train_batches,
+                         devices=1,
+                         accelerator="cpu",
+                         log_every_n_steps=10,
+                         limit_train_batches=20,
                          limit_val_batches=val_batches,
                          max_epochs=config.max_epoch,
                          enable_checkpointing=True)

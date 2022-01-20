@@ -1,5 +1,5 @@
 # meta
-exp_name: layer_latent_discriminators_skc_1
+exp_name: nada
 network: FaderNet
 mode: train
 cuda: false 
@@ -11,7 +11,7 @@ dataset: material
 data_augmentation: True
 data_root: /media/raid/dsubias/data/rendering_materials/renders/datasets_allshapes/renders_by_geom_ldr/network_dataset/
 train_file: 'attributes_dataset_train_new_illum.txt'
-test_file: attributes_dataset_test_new.txt
+test_file: 'attributes_dataset_test_new_daniel.txt'
 crop_size: 240
 image_size: 128
 img_channels: 4
@@ -19,8 +19,9 @@ mask_input_bg: True
 
 #which part activate
 use_latent_disc: true
-use_image_disc: false
-use_LLD: true
+use_image_disc: true
+use_LLD: false
+use_stu: true
 GAN_style: "classif"
 rec_loss: 'l1' #Can be l1, l2, perceptual
 
@@ -31,12 +32,12 @@ d_conv_dim: 32
 d_fc_dim: 256
 max_conv_dim: 512
 vgg_like: 0 #True
-g_layers: 6
-d_layers: 6
+g_layers: 5
+d_layers: 5
 first_conv: False
 n_bottlenecks: 2
 #divide into branches, skip connections, where to put the attributes
-skip_connections: 1
+skip_connections: 3
 n_attr_deconv: 1 #in how many deconv layer add the attribute:0 = no attribute, 1=normal (just concat to bneck)
 n_concat_normals: 4
 #other
@@ -71,6 +72,6 @@ lr_decay_iters: 100000
 
 # steps:
 #33 iter per batch
-summary_step: 100
+summary_step: 2
 sample_step: 10
 checkpoint_step: 10000

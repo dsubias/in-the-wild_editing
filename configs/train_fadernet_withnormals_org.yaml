@@ -11,7 +11,7 @@ dataset: material
 data_augmentation: True
 data_root: /media/raid/dsubias/data/rendering_materials/renders/datasets_allshapes/renders_by_geom_ldr/network_dataset/
 train_file: 'attributes_dataset_train_new_illum.txt'
-test_file: attributes_dataset_test_new.txt
+test_file: 'attributes_dataset_test_new_daniel.txt'
 crop_size: 240
 image_size: 128
 img_channels: 4
@@ -20,6 +20,8 @@ mask_input_bg: True
 #which part activate
 use_latent_disc: true
 use_image_disc: false
+use_LLD: false
+use_stu: false
 GAN_style: "classif"
 rec_loss: 'l1' #Can be l1, l2, perceptual
 

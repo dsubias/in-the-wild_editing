@@ -104,9 +104,10 @@ class FaderNetPL(pl.LightningModule):
                                        n_attr_deconv=config.n_attr_deconv,
                                        normalization=self.norm,
                                        first_conv=config.first_conv,
-                                       n_bottlenecks=config.n_bottlenecks)
+                                       n_bottlenecks=config.n_bottlenecks,
+                                       use_stu=self.config.use_stu)
 
-            if self.config.skip_connections and self.config.use_LLD:
+            if self.config.use_LLD:
                 logger.info("Preparing Layer Discriminators...")
                 self.shift = 0 if not self.config.first_conv else 1
                 config.skip_connections = min(
@@ -131,6 +132,7 @@ class FaderNetPL(pl.LightningModule):
         else:
             logger.info("Model no available")
 
+        # if self.config.use_image_disc:
         if self.config.GAN_style == 'vanilla':
             self.D = Discriminator(image_size=config.image_size, im_channels=3, attr_dim=len(config.attrs), conv_dim=config.d_conv_dim,
                                    n_layers=config.d_layers, max_dim=config.max_conv_dim, fc_dim=config.d_fc_dim, normalization=self.norm)
@@ -144,22 +146,24 @@ class FaderNetPL(pl.LightningModule):
                                        max_dim=config.max_conv_dim, fc_dim=config.d_fc_dim, skip_connections=config.skip_connections, vgg_like=config.vgg_like, normalization=self.norm, first_conv=config.first_conv)
 
         # create all the loss functions that we may need for perceptual loss
-        self.loss_P = PerceptualLoss().to(self.device)
-        self.loss_S = StyleLoss().to(self.device)
+        # if self.config.rec_loss == 'perceptual':
+        self.loss_P = PerceptualLoss()
+        self.loss_S = StyleLoss()
         self.vgg16_f = VGG16FeatureExtractor(
-            ['relu1_2', 'relu2_2', 'relu3_3', 'relu4_4']).to(self.device)
+            ['relu1_2', 'relu2_2', 'relu3_3', 'relu4_4'])
 
         if self.config.use_image_disc:
-            self.criterionGAN = GANLoss(self.config.gan_mode).to(self.device)
+            self.criterionGAN = GANLoss(self.config.gan_mode)
 
         self.scalars = {}
         self.scalars['lr/g_lr'] = []
         self.scalars['lr/d_lr'] = []
         self.scalars['lr/ld_lr'] = []
-        for i in range(self.shift, self.config.skip_connections):
-            self.scalars['LD_layer_{}/loss'.format(i)] = []
-            self.scalars['G/loss_latent_{}'.format(i)] = []
-            self.scalars['lr/ld_{}_lr'.format(i)] = []
+        if self.config.use_LLD:
+            for i in range(self.shift, self.config.skip_connections):
+                self.scalars['LD_layer_{}/loss'.format(i)] = []
+                self.scalars['G/loss_latent_{}'.format(i)] = []
+                self.scalars['lr/ld_{}_lr'.format(i)] = []
 
         self.scalars['LD/loss'] = []
         self.scalars['D/loss_real'] = []
@@ -200,7 +204,7 @@ class FaderNetPL(pl.LightningModule):
         self.G.eval()
         self.LD.eval()
         self.D.eval()
-        if self.config.skip_connections and self.config.use_LLD:
+        if self.config.use_LLD:
             for i in range(self.shift, self.config.skip_connections):
                 getattr(self, 'LD_layer_{}'.format(i)).eval()
 
@@ -209,7 +213,7 @@ class FaderNetPL(pl.LightningModule):
         self.G.train()
         self.LD.train()
         self.D.train()
-        if self.config.skip_connections and self.config.use_LLD:
+        if self.config.use_LLD:
             for i in range(self.shift, self.config.skip_connections):
                 getattr(self, 'LD_layer_{}'.format(i)).train()
 
@@ -290,7 +294,7 @@ class FaderNetPL(pl.LightningModule):
         optimizer_LD = optim.Adam(self.LD.parameters(),  self.config.ld_lr, [
                                   self.config.beta1, self.config.beta2])
         layers_optmimizers = []
-        if self.config.skip_connections and self.config.use_LLD:
+        if self.config.use_LLD:
             for i in range(self.shift, self.config.skip_connections):
                 layers_optmimizers.append(optim.Adam(getattr(self, 'LD_layer_{}'.format(i)).parameters(),  self.config.ld_lr, [
                     self.config.beta1, self.config.beta2]))
@@ -303,7 +307,7 @@ class FaderNetPL(pl.LightningModule):
             optimizer_LD, not self.config.use_latent_disc)
 
         layers_scheduler = []
-        if self.config.skip_connections and self.config.use_LLD:
+        if self.config.use_LLD:
             for i in range(self.shift, self.config.skip_connections):
                 layers_scheduler.append(self.build_scheduler(
                     layers_optmimizers[i], not self.config.use_latent_disc))
@@ -321,7 +325,7 @@ class FaderNetPL(pl.LightningModule):
         self.scalars['lr/d_lr'].append(schedulers[1].get_last_lr()[0])
         self.scalars['lr/ld_lr'].append(schedulers[2].get_last_lr()[0])
 
-        if self.config.skip_connections and self.config.use_LLD:
+        if self.config.use_LLD:
 
             for i in range(0, len(schedulers)-4):
                 self.scalars['lr/ld_{}_lr'.format(i)
@@ -350,6 +354,7 @@ class FaderNetPL(pl.LightningModule):
         return self.G.decode(att, bneck, encodings)
 
     def encode(self):
+
         return self.G.encode(self.batch_Ia)
 
     def forward(self, new_attr=None):
@@ -379,7 +384,7 @@ class FaderNetPL(pl.LightningModule):
                       0.5, 0, 0.5, 1, ((max_val-1)/2.0+1), max_val]
             if max_val == 1:
                 alphas = linspace(-1, 1, 9)  # [-1,-0.75,-0.5,0,0.5,1,]
-            #alphas = np.linspace(-max_val, max_val, 10)
+            # alphas = np.linspace(-max_val, max_val, 10)
             for alpha in alphas:
                 c_trg = c_org.clone()
                 c_trg[:, i] = torch.full_like(c_trg[:, i], alpha)
@@ -426,6 +431,7 @@ class FaderNetPL(pl.LightningModule):
         self.G.eval()
         for i in range(self.shift, self.config.skip_connections):
             getattr(self, 'LD_layer_{}'.format(i)).train()
+
         # compute disc loss on encoded image
         encodings, bneck, bn_list = self.encode()
 
@@ -544,7 +550,7 @@ class FaderNetPL(pl.LightningModule):
                 d_loss_adv_real = self.criterionGAN(out_disc_real, True)
                 # learn to classify
                 d_loss_classif = self.config.d_lambda_classif * \
-                    self.regression_loss(out_classif, self.batch_a_att)
+                    self.classification_loss(out_classif, self.batch_a_att)
                 # fake image
                 out_disc_fake, _ = self.D(Ib_hat.detach())
                 d_loss_adv_fake = self.criterionGAN(out_disc_fake, False)
@@ -572,6 +578,7 @@ class FaderNetPL(pl.LightningModule):
 
         self.training_mode()
         self.batch_Ia, self.batch_normals, self.batch_illum, self.batch_a_att = batch
+
         optimizers = self.optimizers()
 
         # ================================================================================= #
@@ -585,7 +592,7 @@ class FaderNetPL(pl.LightningModule):
         #                        3. Train the layer discriminators (FaderNet)               #
         # ================================================================================= #
 
-        if self.config.skip_connections and self.config.use_LLD:
+        if self.config.use_LLD:
 
             self.train_layer_discriminators(optimizers[3:])
 
@@ -603,7 +610,7 @@ class FaderNetPL(pl.LightningModule):
         self.G.train()
         self.D.eval()
         self.LD.eval()
-        if self.config.skip_connections and self.config.use_LLD:
+        if self.config.use_LLD:
             for i in range(self.shift, self.config.skip_connections):
                 getattr(self, 'LD_layer_{}'.format(i)).eval()
 
@@ -632,7 +639,7 @@ class FaderNetPL(pl.LightningModule):
         # latent discriminator for attribute
         if self.config.use_latent_disc:
             # Compute the loss for layer discriminator
-            if self.config.skip_connections and self.config.use_LLD:
+            if self.config.use_LLD:
                 for i in range(self.shift, self.config.skip_connections):
                     out_att = getattr(self, 'LD_layer_{}'.format(i))(
                         encodings[i], bn_list)
@@ -670,7 +677,7 @@ class FaderNetPL(pl.LightningModule):
                 loss_adv = self.config.lambda_adv * \
                     self.criterionGAN(out_disc, True)
                 loss_classif = self.config.lambda_adv_classif * \
-                    self.regression_loss(out_classif, b_att)
+                    self.classification_loss(out_classif, b_att)
                 g_loss_adv = loss_adv + loss_classif
                 self.scalars['G/loss_adv_classif'].append(loss_classif.item())
             # GAN loss
@@ -694,11 +701,14 @@ class FaderNetPL(pl.LightningModule):
                     self.scalars[tag] = []
 
         self.current_iteration += 1
+
         return self.scalars
 
     def validation_step(self, batch, batch_idx):
         self.eval_mode()
         max_val = 5.0
+        tensorboard = self.logger.experiment
+        print(tensorboard)
         path = os.path.join(self.config.sample_dir,
                             'validation_sample_{}.png'.format(
                                 self.current_iteration))
@@ -726,6 +736,10 @@ class FaderNetPL(pl.LightningModule):
         x_concat = torch.cat(x_fake_list, dim=3)
         image = tvutils.make_grid(denorm(x_concat, device=self.device), nrow=1)
         tvutils.save_image(image, path)
+        print(type(image))
+        tensorboard.add_image("validation_sample", image,
+                              self.current_iteration)
+        exit()
 
     def testing_step(self, batch, batch_idx):
         self.eval_mode()
@@ -769,8 +783,9 @@ class FaderNetPL(pl.LightningModule):
     def regression_loss(self, logit, target):  # static
         return F.l1_loss(logit, target) / logit.size(0)
 
-    def classification_loss(self, logit, target):  # static
-        return F.cross_entropy(logit, target)
+    def classification_loss(self, logit, target):
+        """Compute binary cross entropy loss."""
+        return F.binary_cross_entropy_with_logits(logit, target, reduction='sum') / logit.size(0)
 
     def image_reconstruction_loss(self, Ia, Ia_hat):
         if self.config.rec_loss == 'l1':
