@@ -33,7 +33,7 @@ def print_cuda_statistics():
           "--query-gpu=index,name,driver_version,memory.total,memory.used,memory.free"])
     logger.info('__Active CUDA Device: GPU {}'.format(torch.cuda.current_device()))
     logger.info('__Available devices  {}'.format(torch.cuda.device_count()))
-    logger.info('__Current cuda device  {} ({})'.format(torch.cuda.current_device(),torch.cuda.get_device_name(torch.cuda.current_device()) ))
+    logger.info('__Current cuda device  {}'.format(torch.cuda.current_device()))
 
 
 def create_dirs(dirs):
