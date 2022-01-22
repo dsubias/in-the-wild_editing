@@ -1,7 +1,8 @@
 import argparse
-
+import os
 from agents import STGANAgent
 from utils.config import *
+os.nice(10)
 
 
 def main():

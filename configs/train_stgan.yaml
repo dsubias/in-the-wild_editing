@@ -1,14 +1,18 @@
 # meta
-exp_name: stgan
+exp_name: stgan_0-1_256_480
 mode: train
-cuda: true
-ngpu: 2
+cuda: False
+ngpu: 1
 
 # data
-dataset: celeba
-data_root: /root/datasets/CelebA/
-crop_size: 178
-image_size: 128
+dataset: material
+data_root: 'rendering_materials/renders/datasets_allshapes/renders_by_geom_ldr/network_dataset/'
+train_file: 'attributes_dataset_train_new_illum.txt'
+test_file: 'attributes_dataset_test_new_daniel.txt'
+crop_size: 480
+image_size: 256
+data_augmentation: True
+mask_input_bg: True
 
 # model
 g_conv_dim: 64
@@ -20,8 +24,8 @@ shortcut_layers: 3
 stu_kernel_size: 3
 use_stu: true
 one_more_conv: true
-attrs: [Bangs, Blond_Hair, Brown_Hair, Bushy_Eyebrows, Eyeglasses, Male, Mouth_Slightly_Open, Mustache, Pale_Skin, Young]
-checkpoint: ~
+attrs: [glossy]
+checkpoint: 1400
 
 # training
 batch_size: 32
@@ -40,5 +44,5 @@ lr_decay_iters: 800000
 
 # steps:
 summary_step: 100
-sample_step: 5000
-checkpoint_step: 20000
+sample_step: 100
+checkpoint_step: 100

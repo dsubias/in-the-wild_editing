@@ -1,3 +1,4 @@
+from torchvision.utils import save_image
 import os
 import math
 import torch
@@ -8,7 +9,8 @@ from PIL import Image
 
 def make_dataset(root, mode, selected_attrs):
     assert mode in ['train', 'val', 'test']
-    lines = [line.rstrip() for line in open(os.path.join(root, 'anno', 'list_attr_celeba.txt'), 'r')]
+    lines = [line.rstrip() for line in open(
+        os.path.join(root, 'list_attr_celeba.txt'), 'r')]
     all_attr_names = lines[1].split()
     attr2idx = {}
     idx2attr = {}
@@ -46,7 +48,8 @@ class CelebADataset(data.Dataset):
 
     def __getitem__(self, index):
         filename, label = self.items[index]
-        image = Image.open(os.path.join(self.root, 'image', filename))
+        image = Image.open(os.path.join(
+            self.root, 'img_align_celeba', filename))
         if self.transform is not None:
             image = self.transform(image)
         return image, torch.FloatTensor(label)
@@ -57,7 +60,7 @@ class CelebADataset(data.Dataset):
 
 class CelebADataLoader(object):
     def __init__(self, root, mode, selected_attrs, crop_size=None, image_size=128, batch_size=16):
-        if mode not in ['train', 'test',]:
+        if mode not in ['train', 'test', ]:
             return
 
         transform = []
@@ -65,21 +68,42 @@ class CelebADataLoader(object):
             transform.append(transforms.CenterCrop(crop_size))
         transform.append(transforms.Resize(image_size))
         transform.append(transforms.ToTensor())
-        transform.append(transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
+        transform.append(transforms.Normalize(
+            mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
 
         if mode == 'train':
-            val_transform = transforms.Compose(transform)       # make val loader before transform is inserted
-            val_set = CelebADataset(root, 'val', selected_attrs, transform=val_transform)
-            self.val_loader = data.DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=4)
+            # make val loader before transform is inserted
+            val_transform = transforms.Compose(transform)
+            val_set = CelebADataset(
+                root, 'val', selected_attrs, transform=val_transform)
+            self.val_loader = data.DataLoader(
+                val_set, batch_size=batch_size, shuffle=False, num_workers=4)
             self.val_iterations = int(math.ceil(len(val_set) / batch_size))
 
             transform.insert(0, transforms.RandomHorizontalFlip())
             train_transform = transforms.Compose(transform)
-            train_set = CelebADataset(root, 'train', selected_attrs, transform=train_transform)
-            self.train_loader = data.DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=4)
+            train_set = CelebADataset(
+                root, 'train', selected_attrs, transform=train_transform)
+            self.train_loader = data.DataLoader(
+                train_set, batch_size=batch_size, shuffle=True, num_workers=4)
             self.train_iterations = int(math.ceil(len(train_set) / batch_size))
         else:
             test_transform = transforms.Compose(transform)
-            test_set = CelebADataset(root, 'test', selected_attrs, transform=test_transform)
-            self.test_loader = data.DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=4)
+            test_set = CelebADataset(
+                root, 'test', selected_attrs, transform=test_transform)
+            self.test_loader = data.DataLoader(
+                test_set, batch_size=batch_size, shuffle=False, num_workers=4)
             self.test_iterations = int(math.ceil(len(test_set) / batch_size))
+
+
+data_loader = CelebADataLoader('/media/raid/dsubias/data/',
+                               'train',
+                               ['Bangs'],
+                               178,
+                               128,
+                               32)
+iter = iter(data_loader.train_loader)
+x, y = next(iter)
+print(x[0].shape)
+print(x[0])
+save_image(x[0]/2 + 0.5, 'celeba.png')
