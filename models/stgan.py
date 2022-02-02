@@ -52,7 +52,8 @@ class Generator(nn.Module):
         self.n_layers = n_layers
         self.shortcut_layers = min(shortcut_layers, n_layers - 1)
         self.use_stu = use_stu
-
+        self.upsample = nn.Upsample(
+            scale_factor=2, mode='bilinear', align_corners=False)
         self.encoder = nn.ModuleList()
         in_channels = 3
         for i in range(self.n_layers):
@@ -74,47 +75,49 @@ class Generator(nn.Module):
             if i < self.n_layers - 1:
                 if i == 0:
                     self.decoder.append(nn.Sequential(
-                        nn.ConvTranspose2d(conv_dim * 2 ** (self.n_layers - 1) + attr_dim,
-                                           conv_dim * 2 ** (self.n_layers - 1), 4, 2, 1, bias=False),
+                        nn.Conv2d(conv_dim * 2 ** (self.n_layers - 1) + attr_dim,
+                                  conv_dim * 2 ** (self.n_layers - 1), 3, 1, 1, bias=False),
                         nn.BatchNorm2d(in_channels),
                         nn.ReLU(inplace=True)
                     ))
                 elif i <= self.shortcut_layers:     # not <
                     self.decoder.append(nn.Sequential(
-                        nn.ConvTranspose2d(conv_dim * 3 * 2 ** (self.n_layers - 1 - i),
-                                           conv_dim * 2 ** (self.n_layers - 1 - i), 4, 2, 1, bias=False),
+                        nn.Conv2d(conv_dim * 3 * 2 ** (self.n_layers - 1 - i),
+                                  conv_dim * 2 ** (self.n_layers - 1 - i),  3, 1, 1, bias=False),
                         nn.BatchNorm2d(
                             conv_dim * 2 ** (self.n_layers - 1 - i)),
                         nn.ReLU(inplace=True)
                     ))
                 else:
                     self.decoder.append(nn.Sequential(
-                        nn.ConvTranspose2d(conv_dim * 2 ** (self.n_layers - i),
-                                           conv_dim * 2 ** (self.n_layers - 1 - i), 4, 2, 1, bias=False),
+                        nn.Conv2d(conv_dim * 2 ** (self.n_layers - i),
+                                  conv_dim * 2 ** (self.n_layers - 1 - i),  3, 1, 1, bias=False),
                         nn.BatchNorm2d(
                             conv_dim * 2 ** (self.n_layers - 1 - i)),
                         nn.ReLU(inplace=True)
                     ))
             else:
+
                 in_dim = conv_dim * 3 if self.shortcut_layers == self.n_layers - 1 else conv_dim * 2
                 if one_more_conv:
                     self.decoder.append(nn.Sequential(
-                        nn.ConvTranspose2d(
-                            in_dim, conv_dim // 4, 4, 2, 1, bias=False),
+                        nn.Conv2d(
+                            in_dim, conv_dim // 4, 3, 1, 1, bias=False),
                         nn.BatchNorm2d(conv_dim // 4),
                         nn.ReLU(inplace=True),
 
-                        nn.ConvTranspose2d(
+                        nn.Conv2d(
                             conv_dim // 4, 3, 3, 1, 1, bias=False),
                         nn.Tanh()
                     ))
                 else:
                     self.decoder.append(nn.Sequential(
-                        nn.ConvTranspose2d(in_dim, 3, 4, 2, 1, bias=False),
+                        nn.Conv2d(in_dim, 3, 3, 1, 1, bias=False),
                         nn.Tanh()
                     ))
 
     def forward(self, x, a):
+
         # propagate encoder layers
         y = []
         x_ = x
@@ -125,24 +128,22 @@ class Generator(nn.Module):
         out = y[-1]
         n, _, h, w = out.size()
         attr = a.view((n, self.n_attrs, 1, 1)).expand((n, self.n_attrs, h, w))
-        out = self.decoder[0](torch.cat([out, attr], dim=1))
+        out = self.decoder[0](self.upsample(torch.cat([out, attr], dim=1)))
         stu_state = y[-1]
 
         # propagate shortcut layers
         for i in range(1, self.shortcut_layers + 1):
-
             if self.use_stu:
                 stu_out, stu_state = self.stu[i-1](y[-(i+1)], stu_state, a)
-                out = torch.cat([out, stu_out], dim=1)
-                out = self.decoder[i](out)
+                out = self.decoder[i](self.upsample(
+                    torch.cat([out, stu_out], dim=1)))
             else:
-                out = torch.cat([out, y[-(i+1)]], dim=1)
-                out = self.decoder[i](out)
+                out = self.decoder[i](self.upsample(
+                    torch.cat([out, y[-(i+1)]], dim=1)))
 
         # propagate non-shortcut layers
         for i in range(self.shortcut_layers + 1, self.n_layers):
-
-            out = self.decoder[i](out)
+            out = self.decoder[i](self.upsample(out))
 
         return out
 

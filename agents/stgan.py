@@ -22,6 +22,7 @@ cudnn.benchmark = True
 
 att_diff = True
 
+
 class STGANAgent(object):
     def __init__(self, config):
         self.config = config
@@ -41,7 +42,7 @@ class STGANAgent(object):
         self.cuda = torch.cuda.is_available() & self.config.cuda
 
         if self.cuda:
-            self.device = torch.device("cuda")
+            self.device = torch.device("cuda:1")
             self.logger.info("Operation will be on *****GPU-CUDA***** ")
             print_cuda_statistics()
         else:
@@ -124,7 +125,7 @@ class STGANAgent(object):
             alphas = [-max_val, -((max_val-1)/2.0+1), -1, -
                       0.5, 0, 0.5, 1, ((max_val-1)/2.0+1), max_val]
             if max_val == 1:
-                alphas = linspace(0, 1, 9)  # [-1,-0.75,-0.5,0,0.5,1,]
+                alphas = linspace(-1, 2, 9)  # [-1,-0.75,-0.5,0,0.5,1,]
             # alphas = np.linspace(-max_val, max_val, 10)
             for alpha in alphas:
                 c_trg = c_org.clone()
@@ -133,6 +134,12 @@ class STGANAgent(object):
             all_lists.append(c_trg_list)
 
         return all_lists
+
+    def img2mse(self, x, y):
+        return torch.mean((x - y) ** 2)
+
+    def mse2psnr(self, x):
+        return -10. * torch.log(x) / torch.log(torch.Tensor([10.]).to(self.device))
 
     def classification_loss(self, logit, target):
         """Compute binary cross entropy loss."""
@@ -191,9 +198,9 @@ class STGANAgent(object):
         val_iter = iter(self.data_loader.val_loader)
 
         x_sample, c_org_sample = next(val_iter)
-        ch_4_sample  = x_sample[:, 3:]
+        ch_4_sample = x_sample[:, 3:]
         x_sample = x_sample[:, :3]
-        
+
         x_sample = x_sample.to(self.device)
         ch_4_sample = ch_4_sample.to(self.device)
         all_sample_list = self.create_interpolated_attr(
@@ -221,7 +228,7 @@ class STGANAgent(object):
                 data_iter = iter(self.data_loader.train_loader)
                 x_real, label_org = next(data_iter)
             x_real = x_real[:, :3]
-            
+
             # generate target domain labels randomly
             rand_idx = torch.randperm(label_org.size(0))
             label_trg = label_org[rand_idx]
@@ -285,6 +292,10 @@ class STGANAgent(object):
             scalars['D/loss_fake'] = d_loss_fake.item()
             scalars['D/loss_gp'] = d_loss_gp.item()
 
+            del d_loss
+            del out_src
+            del out_cls
+
             # =================================================================================== #
             #                               3. Train the generator                                #
             # =================================================================================== #
@@ -294,7 +305,7 @@ class STGANAgent(object):
                 if att_diff:
                     x_fake = self.G(x_real, attr_diff)
                 else:
-                    attr_fake = torch.rand_like(c_org) 
+                    attr_fake = torch.rand_like(c_org)
                     x_fake = self.G(x_real, attr_fake)
 
                 out_src, out_cls = self.D(x_fake)
@@ -309,6 +320,10 @@ class STGANAgent(object):
 
                 g_loss_rec = torch.mean(torch.abs(x_real - x_reconst))
 
+                # compute the PSNR
+                img_mse = self.img2mse(x_reconst, x_real)
+                psnr = self.mse2psnr(img_mse)
+
                 # backward and optimize
                 g_loss = g_loss_adv + self.config.lambda3 * \
                     g_loss_rec + self.config.lambda2 * g_loss_cls
@@ -321,6 +336,11 @@ class STGANAgent(object):
                 scalars['G/loss_adv'] = g_loss_adv.item()
                 scalars['G/loss_cls'] = g_loss_cls.item()
                 scalars['G/loss_rec'] = g_loss_rec.item()
+                scalars['G/psnr'] = psnr
+
+                del g_loss
+                del x_fake
+                del x_reconst
 
             self.current_iteration += 1
 
@@ -339,42 +359,44 @@ class STGANAgent(object):
             if self.current_iteration % self.config.sample_step == 0:
                 self.G.eval()
                 with torch.no_grad():
+
                     for c_sample_list in all_sample_list:
-                        x_sample = x_sample.to(self.device)
-                        x_fake_list = [ torch.cat(
+
+                        x_fake_list = [torch.cat(
                             [x_sample, ch_4_sample], dim=1)]
 
                         for c_trg_sample in c_sample_list:
-                            
+
                             if att_diff:
-                                attr_diff = c_trg_sample.to(
-                                    self.device) - c_org_sample.to(self.device)
-                                attr_diff = attr_diff * self.config.thres_int
-                                
-                                x_fake = self.G(x_sample, attr_diff.to(
-                                    self.device))    
+                                attr_diff = (c_trg_sample -
+                                             c_org_sample).to(self.device)
+                                x_fake = self.G(
+                                    x_sample, attr_diff.to(self.device))
                             else:
-                                x_fake = self.G(x_sample, c_trg_sample.to(self.device))
-                             
+                                x_fake = self.G(
+                                    x_sample, c_trg_sample.to(self.device))
+
                             x_fake = torch.cat(
-                            [x_fake, ch_4_sample], dim=1)
+                                [x_fake, ch_4_sample], dim=1)
                             x_fake_list.append(x_fake)
-                        
+
                         x_concat = torch.cat(x_fake_list, dim=3)
                         image = make_grid(
                             denorm(x_concat, device=self.device), nrow=1)
-                        save_image(image,  os.path.join(self.config.sample_dir, 'sample_{}.png'.format(
-                            self.current_iteration)))
-                        
-                        self.writer.add_image('sample', make_grid(denorm(x_concat, device=self.device), nrow=1),
-                                              self.current_iteration)
-                        
+                        self.writer.add_image('sample', make_grid(
+                            denorm(x_concat, device=self.device), nrow=1), self.current_iteration)
+
+                        del x_concat
+                        del image
+
             if self.current_iteration % self.config.checkpoint_step == 0:
                 self.save_checkpoint()
-            
+
             self.lr_scheduler_G.step()
             self.lr_scheduler_D.step()
-            
+            with torch.cuda.device('cuda:1'):
+                torch.cuda.empty_cache()
+
     def test(self):
         self.load_checkpoint()
         self.G.to(self.device)
@@ -386,18 +408,63 @@ class STGANAgent(object):
         with torch.no_grad():
             for i, (x_real, c_org) in enumerate(tqdm_loader):
                 x_real = x_real.to(self.device)
-                c_trg_list = self.create_labels(c_org, self.config.attrs)
+                ch_4 = x_real[:, 3:]
+                x_real = x_real[:, :3]
 
-                x_fake_list = [x_real]
-                for c_trg in c_trg_list:
-                    attr_diff = c_trg - c_org
-                    x_fake_list.append(
-                        self.G(x_real, attr_diff.to(self.device)))
-                x_concat = torch.cat(x_fake_list, dim=3)
-                result_path = os.path.join(
-                    self.config.result_dir, 'sample_{}.png'.format(i + 1))
-                save_image(denorm(x_concat.data.cpu()),
-                           result_path, nrow=1, padding=0)
+                c_trg_all = self.create_interpolated_attr(
+                    c_org, self.config.attrs, max_val=1.0)
+
+                for c_trg_list in c_trg_all:
+
+                    if self.config.split:
+                        x_fake_list = []
+                        for n in range(0, x_real.shape[0]):
+
+                            x_fake_list.append(
+                                [torch.cat([x_real[n], ch_4[n]], dim=0)])
+
+                    else:
+                        x_fake_list = [torch.cat([x_real, ch_4], dim=1)]
+
+                    for c_trg_sample in c_trg_list:
+
+                        if att_diff:
+                            attr_diff = c_trg_sample.to(
+                                self.device) - c_org.to(self.device)
+                            x_fake = self.G(x_real, attr_diff.to(self.device))
+                        else:
+                            x_fake = self.G(
+                                x_real, c_trg_sample.to(self.device))
+
+                        if self.config.split:
+
+                            for n in range(0, x_real.shape[0]):
+
+                                x_fake_n = torch.cat(
+                                    [x_fake[n], ch_4[n]], dim=0)
+                                x_fake_list[n].append(x_fake_n)
+
+                        else:
+
+                            x_fake = torch.cat([x_fake, ch_4], dim=1)
+                            x_fake_list.append(x_fake)
+
+                    if self.config.split:
+                        for n in range(0, x_real.shape[0]):
+
+                            x_concat = torch.cat(x_fake_list[n], dim=2)
+                            image = make_grid(
+                                denorm(x_concat, device=self.device), nrow=1)
+                            result_path = os.path.join(
+                                self.config.result_dir, 'sample_{}_{}.png'.format(n, i + 1))
+                            save_image(image, result_path, nrow=1, padding=0)
+                    else:
+                        x_concat = torch.cat(x_fake_list, dim=3)
+                        image = make_grid(
+                            denorm(x_concat, device=self.device), nrow=1)
+                        result_path = os.path.join(
+                            self.config.result_dir, 'sample_{}.png'.format(i + 1))
+                        save_image(image, result_path, nrow=1, padding=0)
 
     def finalize(self):
         print('Please wait while finalizing the operation.. Thank you')

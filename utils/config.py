@@ -61,14 +61,14 @@ def process_config(yaml_file):
 
     # create some important directories to be used for that experiments
     config.summary_dir = os.path.join(
-        'experiments', config.exp_name, 'summaries/')
+        '/media/raid/dsubias/experiments', config.exp_name, 'summaries/')
     config.checkpoint_dir = os.path.join(
-        'experiments', config.exp_name, 'checkpoints/')
+        '/media/raid/dsubias/experiments', config.exp_name, 'checkpoints/')
     config.sample_dir = os.path.join(
-        'experiments', config.exp_name, 'samples/')
-    config.log_dir = os.path.join('experiments', config.exp_name, 'logs/')
+        '/media/raid/dsubias/experiments', config.exp_name, 'samples/')
+    config.log_dir = os.path.join('/media/raid/dsubias/experiments', config.exp_name, 'logs/')
     config.result_dir = os.path.join(
-        'experiments', config.exp_name, 'results/')
+        '/media/raid/dsubias/experiments', config.exp_name, 'results/')
     create_dirs([config.summary_dir, config.checkpoint_dir,
                 config.sample_dir, config.log_dir, config.result_dir])
 
