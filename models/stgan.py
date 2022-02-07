@@ -7,8 +7,10 @@ class ConvGRUCell(nn.Module):
     def __init__(self, n_attrs, in_dim, out_dim, kernel_size=3):
         super(ConvGRUCell, self).__init__()
         self.n_attrs = n_attrs
-        self.upsample = nn.ConvTranspose2d(
-            in_dim * 2 + n_attrs, out_dim, 4, 2, 1, bias=False)
+        self.upsample = nn.Sequential(
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
+            nn.Conv2d(in_dim * 2 + n_attrs, out_dim, 3, 1, 1, bias=False))
+
         self.reset_gate = nn.Sequential(
             nn.Conv2d(in_dim + out_dim, out_dim, kernel_size,
                       1, (kernel_size - 1) // 2, bias=False),
@@ -35,9 +37,7 @@ class ConvGRUCell(nn.Module):
             (n, self.n_attrs, h, w))
 
         state_hat = self.upsample(torch.cat([old_state, attr], 1))
-
         r = self.reset_gate(torch.cat([input, state_hat], dim=1))
-
         z = self.update_gate(torch.cat([input, state_hat], dim=1))
         new_state = r * state_hat
         hidden_info = self.hidden(torch.cat([input, new_state], dim=1))

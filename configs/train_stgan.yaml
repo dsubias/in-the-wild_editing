@@ -1,5 +1,5 @@
 # meta
-exp_name: stgan_0-1_256_480_d45_us_glossy
+exp_name: stgan_0-1_128_178_d45_newus_glossy
 mode: train
 split: True
 cuda: True
@@ -7,11 +7,11 @@ ngpu: 1
 
 # data
 dataset: material
-data_root: '/media/raid/dsubias/data/rendering_materials/renders/datasets_allshapes/renders_by_geom_ldr/data_45k'
+data_root: 'data_45k'
 train_file: 'attributes_dataset_train_new_median.txt'
 test_file: 'attributes_dataset_test_new_daniel.txt'
-crop_size: 480
-image_size: 256
+crop_size: 178
+image_size: 128
 data_augmentation: True
 mask_input_bg: True
 
@@ -26,10 +26,10 @@ stu_kernel_size: 3
 use_stu: True
 one_more_conv: True
 attrs: [glossy]
-checkpoint: ~
+checkpoint: 140000
 
 # training
-batch_size: 16
+batch_size: 32
 beta1: 0.5
 beta2: 0.999
 g_lr: 0.0002
@@ -40,7 +40,7 @@ lambda_gp: 10
 lambda1: 1
 lambda2: 10
 lambda3: 100
-max_iters: 1000000
+max_iters: 400000
 lr_decay_iters: 800000
 
 # steps:

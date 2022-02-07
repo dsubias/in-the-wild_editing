@@ -91,32 +91,6 @@ class STGANAgent(object):
             self.optimizer_G.load_state_dict(G_checkpoint['optimizer'])
             self.optimizer_D.load_state_dict(D_checkpoint['optimizer'])
 
-    def denorm(self, x):
-        out = (x + 1) / 2
-        return out.clamp_(0, 1)
-
-    def create_labels(self, c_org, selected_attrs=None):
-        """Generate target domain labels for debugging and testing."""
-        # get hair color indices
-        hair_color_indices = []
-        for i, attr_name in enumerate(selected_attrs):
-            if attr_name in ['Black_Hair', 'Blond_Hair', 'Brown_Hair', 'Gray_Hair']:
-                hair_color_indices.append(i)
-
-        c_trg_list = []
-        for i in range(len(selected_attrs)):
-            c_trg = c_org.clone()
-            if i in hair_color_indices:  # set one hair color to 1 and the rest to 0
-                c_trg[:, i] = 1
-                for j in hair_color_indices:
-                    if j != i:
-                        c_trg[:, j] = 0
-            else:
-                c_trg[:, i] = (c_trg[:, i] == 0)  # reverse attribute value
-
-            c_trg_list.append(c_trg.to(self.device))
-        return c_trg_list
-
     def create_interpolated_attr(self, c_org, selected_attrs=None, max_val=5.0):
         """Generate target domain labels for debugging and testing: linearly sample attribute. Contains a list for each attr"""
         all_lists = []

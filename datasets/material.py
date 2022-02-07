@@ -224,4 +224,198 @@ class MaterialDataset(data.Dataset):
         else:
             # otherwise, put the normals and a full mask
             mask = np.ones((size, size, 1), np.uint8)*255
-            normals = np.ndarray((size
+            normals = np.ndarray((size, size, 4), dtype=np.uint8)
+            cv2.mixChannels([image_rgb, mask], [normals],
+                            [0, 0, 1, 1, 2, 2, 3, 3])
+        if self.mode == "test":
+            # slighlty erode mask so that the results are nicer
+            element = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+            normals[:, :, 3] = cv2.dilate(normals[:, :, 3], element)
+        # add mask to image
+        image = np.ndarray(normals.shape, dtype=np.uint8)
+        cv2.mixChannels([image_rgb, normals], [image],
+                        [0, 0, 1, 1, 2, 2, 6, 3])
+
+        if (self.use_illum):
+            illum = cv2.imread(os.path.join(
+                self.root, "illum", self.files[index]), -1)
+            if (not type(illum) is np.ndarray):
+                illum = extract_highlights(image)
+                illum = np.concatenate(
+                    [illum, illum, illum], axis=2)  # 3channels?
+            else:
+                if illum.ndim == 3:  # RGB image
+                    # or cv2.COLOR_BGR2GRAY
+                    illum = cv2.cvtColor(illum, cv2.COLOR_BGR2RGB)
+                else:
+                    illum = illum[:, :, np.newaxis]  # image is already B&W
+                    illum = np.concatenate([illum, illum, illum], axis=2)
+        else:
+            illum = torch.Tensor()
+
+        # PIL version: faster but apply the alpha channel when resizing
+        #image = Image.open(os.path.join(self.root, "renderings", self.files[index]))
+        # try:
+        #     normals = Image.open(os.path.join(self.root, "normals", self.files[index][:-3]+"png"))
+        #     mask=get_alpha_channel(normals)
+        # except FileNotFoundError:
+        #     #put the original image in place of the normals + full mask
+        #     normals=image
+        #     mask = Image.new('L',normals.size,255)
+        #     normals.putalpha(mask)
+        # image.putalpha(mask)
+
+        # apply the transforms
+        if self.transform is not None:
+            if self.use_illum:
+                image, normals, illum = self.transform(image, normals, illum)
+            else:
+                image, normals = self.transform(image, normals)
+
+        # mask the normals
+        normals = normals*normals[3:]
+        # mask the input image if asked
+        if self.mask_input_bg:
+            image = image*image[3:]
+            if self.use_illum:
+                illum = illum*image[3:]
+
+        if self.disentangled:
+            return image, illum, torch.FloatTensor(mat_attr)
+        else:
+            return image, torch.FloatTensor(mat_attr)
+
+    def __len__(self):
+        return len(self.files)
+
+
+# the main dataloader
+class MaterialDataLoader(object):
+    def __init__(self, root, train_file, test_file, mode, selected_attrs, crop_size=None, image_size=128, batch_size=16, data_augmentation=False, mask_input_bg=True, use_illum=False):
+        if mode not in ['train', 'test']:
+            return
+
+        self.root = root
+        self.data_augmentation = data_augmentation
+        self.image_size = image_size
+        self.crop_size = crop_size
+
+        # setup the dataloaders
+        train_trf, val_trf = self.setup_transforms(use_illum)
+        if mode == 'train':
+            print("loading data")
+            val_set = MaterialDataset(
+                root, train_file, test_file, 'val', selected_attrs, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
+            self.val_loader = data.DataLoader(
+                val_set, batch_size=batch_size, shuffle=False, num_workers=4)
+            self.val_iterations = int(math.ceil(len(val_set) / batch_size))
+
+            train_set = MaterialDataset(
+                root, train_file, test_file, 'train', selected_attrs, transform=train_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
+            self.train_loader = data.DataLoader(
+                train_set, batch_size=batch_size, shuffle=True, num_workers=4)
+            self.train_iterations = int(math.ceil(len(train_set) / batch_size))
+        else:
+            batch_size = 32
+            test_set = MaterialDataset(
+                root, train_file, test_file,  'test', selected_attrs, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
+            self.test_loader = data.DataLoader(
+                test_set, batch_size=batch_size, shuffle=False, num_workers=4)
+            self.test_iterations = int(math.ceil(len(test_set) / batch_size))
+    #
+
+    def setup_transforms(self, use_illum):
+        global T
+        if (use_illum):
+            dset = __import__('datasets.transforms3', globals(), locals())
+            T = dset.transforms3
+        else:
+            dset = __import__('datasets.transforms2', globals(), locals())
+            T = dset.transforms2
+        # basic transform to put at the right size
+        val_trf = T.Compose([
+            # T.CenterCrop(self.crop_size),
+            T.Resize(self.image_size),
+            T.ToTensor(),
+            T.Normalize(mean=(0.5, 0.5, 0.5, 0), std=(0.5, 0.5, 0.5, 1))
+        ])
+        # training transform : data augmentation
+        original_size = self.image_size*2
+        if self.data_augmentation:
+            train_trf = T.Compose([
+                T.Resize(original_size),  # suppose the dataset is of size 256
+                T.RandomHorizontalFlip(0.5),
+                T.RandomVerticalFlip(0.5),
+                T.Random180DegRot(0.5),
+                T.Random90DegRotClockWise(0.5),
+                T.Albumentations(50, 50, 0.5),  # change in color
+                T.RandomCrop(size=self.crop_size),
+                T.RandomResize(low=original_size,
+                               high=int(original_size*1.1718)),
+                T.CenterCrop(original_size),
+                # T.RandomRotation(degrees=(-5, 5)), #TODO recode for normals
+                val_trf,
+            ])
+        else:
+            train_trf = T.Compose([
+                T.Resize(original_size),
+                val_trf,
+            ])
+        val_trf = T.Compose([
+            T.Resize(original_size),
+            val_trf,
+        ])
+        return train_trf, val_trf
+
+
+if __name__ == '__main__':
+    from torch.utils.data import DataLoader
+    use_illum = True
+    global T
+    if (use_illum):
+        dset = __import__('transforms3', globals(), locals())
+        T = dset
+    else:
+        dset = __import__('transforms2', globals(), locals())
+        T = dset
+    val_trf = T.Compose([
+        T.CenterCrop(240),
+        T.Resize(128),
+        T.ToTensor()
+        #T.Normalize(mean=(0.5, 0.5, 0.5,0), std=(0.5, 0.5, 0.5,1))
+    ])
+    trf = T.Compose([
+        T.Resize(256),  # suppose the dataset is of size 256
+        # T.RandomHorizontalFlip(0.5), #TODO recode for normals
+        # T.RandomVerticalFlip(0.5), #TODO recode for normals
+        T.RandomCrop(size=240),
+        T.RandomResize(low=256, high=300),
+        # T.RandomRotation(degrees=(-5, 5)), #TODO recode for normals
+        val_trf,
+    ])
+
+    data_root = '/Users/delanoy/Documents/postdoc/project1_material_networks/dataset/renders_by_geom_ldr/network_dataset/'
+    data = MaterialDataset(root=data_root,
+                           mode='test',
+                           selected_attrs=['glossy'],
+                           transform=trf,
+                           mask_input_bg=True, use_illum=use_illum)
+    #sampler = DisentangledSampler(data, batch_size=8)
+    loader = DataLoader(data,  batch_size=1, shuffle=True)
+    iter(loader)
+    for imgs, normal, illum, attr in loader:
+        # from matplotlib import pyplot as plt
+
+        # # for i in range(len(imgs)):
+        # #     print (infos[i])
+        for i in range(len(imgs)):
+            # print(illum[i][:,0,0])
+            plt.subplot(1, 3, 1)
+            plt.imshow(imgs[i].permute(1, 2, 0).detach().cpu(), cmap='gray')
+            plt.subplot(1, 3, 2)
+            plt.imshow(normal[i].permute(1, 2, 0).detach().cpu(), cmap='gray')
+            plt.subplot(1, 3, 3)
+            plt.imshow(illum[i].permute(1, 2, 0).detach().cpu(), cmap='gray')
+            plt.show()
+        print("done")
+        #input('press key to continue plotting')
