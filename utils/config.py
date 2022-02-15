@@ -71,6 +71,11 @@ def process_config(yaml_file):
         '/media/raid/dsubias/experiments', config.exp_name, 'results/')
     create_dirs([config.summary_dir, config.checkpoint_dir,
                 config.sample_dir, config.log_dir, config.result_dir])
+    if config.histogram:
+        config.histogram_dir = os.path.join(
+        '/media/raid/dsubias/experiments', config.exp_name, 'results/histograms')
+        if not os.path.exists(config.histogram_dir):
+                os.makedirs(config.histogram_dir)
 
     # setup logging in the project
     setup_logging(config.log_dir)

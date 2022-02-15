@@ -1,5 +1,5 @@
 # meta
-exp_name: stgan_0-1_128_178_d45_newus_glossy
+exp_name: prueba #256_480_d45_small_4_hist_lrd
 mode: train
 split: True
 cuda: True
@@ -10,23 +10,28 @@ dataset: material
 data_root: 'data_45k'
 train_file: 'attributes_dataset_train_new_median.txt'
 test_file: 'attributes_dataset_test_new_daniel.txt'
-crop_size: 178
-image_size: 128
+crop_size: 480
+image_size: 256
 data_augmentation: True
 mask_input_bg: True
+att_max: 2
+att_min: -1
+num_samples: 9
+histogram: True
+att_diff: True
 
 # model
-g_conv_dim: 64
-d_conv_dim: 64
+g_conv_dim: 32
+d_conv_dim: 32
 d_fc_dim: 1024
 g_layers: 5
 d_layers: 5
-shortcut_layers: 3
+shortcut_layers: 4
 stu_kernel_size: 3
 use_stu: True
 one_more_conv: True
 attrs: [glossy]
-checkpoint: 140000
+checkpoint: ~
 
 # training
 batch_size: 32
@@ -40,10 +45,10 @@ lambda_gp: 10
 lambda1: 1
 lambda2: 10
 lambda3: 100
-max_iters: 400000
-lr_decay_iters: 800000
+max_iters: 50000
+lr_decay_iters: 40000
 
 # steps:
 summary_step: 100
-sample_step: 10000
+sample_step: 1
 checkpoint_step: 10000

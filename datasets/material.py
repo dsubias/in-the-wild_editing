@@ -8,7 +8,7 @@ from torchvision import transforms as Tvision
 from PIL import Image
 import random
 import numpy as np
-#from utils.im_util import get_alpha_channel
+# from utils.im_util import get_alpha_channel
 import cv2
 from matplotlib import pyplot as plt
 
@@ -40,7 +40,7 @@ def make_dataset(root, train_file, test_file, mode, selected_attrs):
         print('Validation Samples:', len(lines))
     if mode == 'test':
         # np.random.shuffle(lines_test)
-        #lines_test=[line for line in lines_test if ("@mat" in line)]
+        # lines_test=[line for line in lines_test if ("@mat" in line)]
         # [:32*2]+random.sample(lines_train,32*4) #for full dataset
         lines = lines_test[1:]
         print('Test Samples', len(lines))
@@ -65,7 +65,7 @@ def make_dataset(root, train_file, test_file, mode, selected_attrs):
         mat_attr = []
         for attr_name in selected_attrs:
             idx = attr2idx[attr_name]
-            mat_attr.append(float(values[idx]))  # * 2 - 1)
+            mat_attr.append(float(values[idx]))
 
         files.append(filename)
         mat_attrs.append(mat_attr)
@@ -254,7 +254,7 @@ class MaterialDataset(data.Dataset):
             illum = torch.Tensor()
 
         # PIL version: faster but apply the alpha channel when resizing
-        #image = Image.open(os.path.join(self.root, "renderings", self.files[index]))
+        # image = Image.open(os.path.join(self.root, "renderings", self.files[index]))
         # try:
         #     normals = Image.open(os.path.join(self.root, "normals", self.files[index][:-3]+"png"))
         #     mask=get_alpha_channel(normals)
@@ -382,7 +382,7 @@ if __name__ == '__main__':
         T.CenterCrop(240),
         T.Resize(128),
         T.ToTensor()
-        #T.Normalize(mean=(0.5, 0.5, 0.5,0), std=(0.5, 0.5, 0.5,1))
+        # T.Normalize(mean=(0.5, 0.5, 0.5,0), std=(0.5, 0.5, 0.5,1))
     ])
     trf = T.Compose([
         T.Resize(256),  # suppose the dataset is of size 256
@@ -400,7 +400,7 @@ if __name__ == '__main__':
                            selected_attrs=['glossy'],
                            transform=trf,
                            mask_input_bg=True, use_illum=use_illum)
-    #sampler = DisentangledSampler(data, batch_size=8)
+    # sampler = DisentangledSampler(data, batch_size=8)
     loader = DataLoader(data,  batch_size=1, shuffle=True)
     iter(loader)
     for imgs, normal, illum, attr in loader:
@@ -418,4 +418,4 @@ if __name__ == '__main__':
             plt.imshow(illum[i].permute(1, 2, 0).detach().cpu(), cmap='gray')
             plt.show()
         print("done")
-        #input('press key to continue plotting')
+        # input('press key to continue plotting')

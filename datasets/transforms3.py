@@ -9,7 +9,6 @@ from opencv_transforms import functional as F
 from opencv_transforms import transforms as T
 
 
-
 # def pad_if_smaller(img, size, fill=0):
 #     min_size = min(img.size)
 #     if min_size < size:
@@ -39,16 +38,18 @@ class CenterCrop(object):
         illum = F.center_crop(illum, self.size)
         return image, normals, illum
 
-class Resize(object): 
+
+class Resize(object):
     def __init__(self, size, interpolation=Image.BILINEAR):
-        self.size = (size,size) #TODO according to what is size
+        self.size = (size, size)  # TODO according to what is size
         self.interpolation = interpolation
 
-    def __call__(self, image, normals, illum): #TODO warning f
+    def __call__(self, image, normals, illum):  # TODO warning f
         image = F.resize(image, self.size, self.interpolation)
         normals = F.resize(normals, self.size, self.interpolation)
         illum = F.resize(illum, self.size, self.interpolation)
         return image, normals, illum
+
 
 class ToTensor(object):
     def __call__(self, image, normals, illum):
@@ -56,6 +57,7 @@ class ToTensor(object):
         normals = F.to_tensor(normals)
         illum = F.to_tensor(illum)
         return image, normals, illum
+
 
 class Normalize(object):
     def __init__(self, mean, std):
@@ -68,6 +70,7 @@ class Normalize(object):
         illum = F.normalize(illum, mean=self.mean, std=self.std)
         return image, normals, illum
 
+
 class RandomHorizontalFlip(object):
     def __init__(self, flip_prob):
         self.flip_prob = flip_prob
@@ -75,27 +78,27 @@ class RandomHorizontalFlip(object):
     def __call__(self, image, normals, illum):
         if random.random() < self.flip_prob:
             image = F.hflip(image)
-            normals = F.hflip(normals) #TODO change normals
-            illum = F.hflip(illum) 
+            normals = F.hflip(normals)  # TODO change normals
+            illum = F.hflip(illum)
         return image, normals, illum
+
 
 class RandomVerticalFlip(object):
     def __init__(self, flip_prob):
         self.flip_prob = flip_prob
 
-
     def __call__(self, image, normals, illum):
         if random.random() < self.flip_prob:
             image = F.vflip(image)
-            normals = F.vflip(normals) 
-            illum = F.vflip(illum) 
-            #TODO change normals
+            normals = F.vflip(normals)
+            illum = F.vflip(illum)
+            # TODO change normals
         return image, normals, illum
+
 
 class RandomCrop(object):
     def __init__(self, size):
         self.size = size
-
 
     def __call__(self, image, normals, illum):
         #image = pad_if_smaller(image, self.size)
@@ -113,13 +116,13 @@ class RandomResize(object):
         self.high = high
         self.interpolation = interpolation
 
-
-    def __call__(self, image, normals, illum): 
+    def __call__(self, image, normals, illum):
         size = np.random.randint(self.low, self.high)
-        image = F.resize(image, (size,size), self.interpolation)
-        normals = F.resize(normals, (size,size), self.interpolation)
-        illum = F.resize(illum, (size,size), self.interpolation)
+        image = F.resize(image, (size, size), self.interpolation)
+        normals = F.resize(normals, (size, size), self.interpolation)
+        illum = F.resize(illum, (size, size), self.interpolation)
         return image, normals, illum
+
 
 class RandomRotation(object):
     def __init__(self, degrees, resample=False, expand=False, center=None, fill=None):
@@ -129,10 +132,11 @@ class RandomRotation(object):
         self.center = center
         self.fill = fill
 
-    def __call__(self, image, normals, illum): 
+    def __call__(self, image, normals, illum):
         angle = T.RandomRotation.get_params(self.degrees)
-        image =  F.rotate(image, angle, self.resample, self.expand, self.center)
-        normals =  F.rotate(normals, angle, self.resample, self.expand, self.center ) 
-        #TODO change normals
-        illum =  F.rotate(illum, angle, self.resample, self.expand, self.center ) 
+        image = F.rotate(image, angle, self.resample, self.expand, self.center)
+        normals = F.rotate(normals, angle, self.resample,
+                           self.expand, self.center)
+        # TODO change normals
+        illum = F.rotate(illum, angle, self.resample, self.expand, self.center)
         return image, normals, illum

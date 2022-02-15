@@ -1,27 +1,31 @@
-from utils.im_util import denorm
-import os
-import logging
-import time
-import datetime
-import traceback
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from torch.backends import cudnn
-from torchvision.utils import make_grid, save_image
-from tqdm import tqdm
-from tensorboardX import SummaryWriter
-
-from datasets import *
-from models.stgan import Generator, Discriminator
-from utils.misc import print_cuda_statistics
-from tqdm import tqdm, trange
+from operator import imatmul
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 from numpy.core.function_base import linspace
+from tqdm import tqdm, trange
+from utils.misc import print_cuda_statistics
+from models.stgan import Generator, Discriminator
+from datasets import *
+from tensorboardX import SummaryWriter
+from tqdm import tqdm
+from torchvision.utils import make_grid, save_image
+from torch.backends import cudnn
+import torch.optim as optim
+import torch.nn.functional as F
+import torch.nn as nn
+import torch
+import traceback
+import datetime
+import time
+import logging
+import os
+from utils.im_util import denorm
+from PIL import Image
+import numpy as np
+import cv2
+
 cudnn.benchmark = True
-
-att_diff = True
-
 
 class STGANAgent(object):
     def __init__(self, config):
@@ -75,9 +79,9 @@ class STGANAgent(object):
         G_filename = 'G_{}.pth.tar'.format(self.config.checkpoint)
         D_filename = 'D_{}.pth.tar'.format(self.config.checkpoint)
         G_checkpoint = torch.load(os.path.join(
-            self.config.checkpoint_dir, G_filename))
+            self.config.checkpoint_dir, G_filename), map_location=self.device)
         D_checkpoint = torch.load(os.path.join(
-            self.config.checkpoint_dir, D_filename))
+            self.config.checkpoint_dir, D_filename), map_location=self.device)
         G_to_load = {k.replace('module.', ''): v for k,
                      v in G_checkpoint['state_dict'].items()}
         D_to_load = {k.replace('module.', ''): v for k,
@@ -91,15 +95,13 @@ class STGANAgent(object):
             self.optimizer_G.load_state_dict(G_checkpoint['optimizer'])
             self.optimizer_D.load_state_dict(D_checkpoint['optimizer'])
 
-    def create_interpolated_attr(self, c_org, selected_attrs=None, max_val=5.0):
+    def create_interpolated_attr(self, c_org, selected_attrs=None,att_min=-1, att_max=1, num_samples=9):
         """Generate target domain labels for debugging and testing: linearly sample attribute. Contains a list for each attr"""
         all_lists = []
         for i in range(len(selected_attrs)):
             c_trg_list = []  # [c_org]
-            alphas = [-max_val, -((max_val-1)/2.0+1), -1, -
-                      0.5, 0, 0.5, 1, ((max_val-1)/2.0+1), max_val]
-            if max_val == 1:
-                alphas = linspace(-1, 2, 9)  # [-1,-0.75,-0.5,0,0.5,1,]
+            alphas = linspace(att_min, att_max, num_samples)
+            # print(alphas)
             # alphas = np.linspace(-max_val, max_val, 10)
             for alpha in alphas:
                 c_trg = c_org.clone()
@@ -152,6 +154,7 @@ class STGANAgent(object):
             # self.finalize()
 
     def train(self):
+        
         self.optimizer_G = optim.Adam(self.G.parameters(), self.config.g_lr, [
             self.config.beta1, self.config.beta2])
         self.optimizer_D = optim.Adam(self.D.parameters(), self.config.d_lr, [
@@ -178,12 +181,19 @@ class STGANAgent(object):
         x_sample = x_sample.to(self.device)
         ch_4_sample = ch_4_sample.to(self.device)
         all_sample_list = self.create_interpolated_attr(
-            c_org_sample, self.config.attrs, max_val=1.0)
-
-        # c_sample_list.insert(0, c_org_sample)  # reconstruction
+            c_org_sample, self.config.attrs, self.config.att_min,self.config.att_max, self.config.num_samples)
 
         self.g_lr = self.lr_scheduler_G.get_lr()[0]
         self.d_lr = self.lr_scheduler_D.get_lr()[0]
+
+        if self.config.histogram:
+            nb_bins = 256
+            att_bins = 300
+            count_r = np.zeros(nb_bins, dtype=np.float128)
+            count_g = np.zeros(nb_bins, dtype=np.float128)
+            count_b = np.zeros(nb_bins, dtype=np.float128)
+            count_att = np.zeros(att_bins, dtype=np.float128)
+            count_att_diff = np.zeros(att_bins, dtype=np.float128)
 
         data_iter = iter(self.data_loader.train_loader)
         start_time = time.time()
@@ -201,7 +211,8 @@ class STGANAgent(object):
             except:
                 data_iter = iter(self.data_loader.train_loader)
                 x_real, label_org = next(data_iter)
-            x_real = x_real[:, :3]
+
+            # data color histogram
 
             # generate target domain labels randomly
             rand_idx = torch.randperm(label_org.size(0))
@@ -211,6 +222,22 @@ class STGANAgent(object):
             c_trg = label_trg.clone()
 
             x_real = x_real.to(self.device)         # input images
+
+            if self.config.histogram:
+                de_norm = denorm(x_real, device=self.device).cpu().numpy()
+                de_norm = (de_norm * 255).astype(int)
+
+                hist_r = np.histogram(de_norm[:, 0], bins=nb_bins, range=[0, 255])
+                hist_g = np.histogram(de_norm[:, 1], bins=nb_bins, range=[0, 255])
+                hist_b = np.histogram(de_norm[:, 2], bins=nb_bins, range=[0, 255])
+                
+                count_r += hist_r[0]
+                count_g += hist_g[0]
+                count_b += hist_b[0]
+                
+            x_real = x_real[:, :3]
+            
+
             c_org = c_org.to(self.device)           # original domain labels
             c_trg = c_trg.to(self.device)           # target domain labels
             # labels for computing classification loss
@@ -228,7 +255,7 @@ class STGANAgent(object):
             d_loss_cls = self.classification_loss(out_cls, label_org)
 
             # compute loss with fake images
-            if att_diff:
+            if self.config.att_diff:
                 attr_diff = c_trg - c_org
                 attr_diff = attr_diff * \
                     torch.rand_like(attr_diff) * (2 * self.config.thres_int)
@@ -238,6 +265,11 @@ class STGANAgent(object):
                 attr_fake = torch.rand_like(c_org)
                 x_fake = self.G(x_real, attr_fake)
 
+            if self.config.histogram:
+                hist_att = np.histogram(c_org.cpu().numpy(), bins=att_bins, range=[0,1])
+                hist_att_diff = np.histogram(attr_diff.cpu().numpy(), bins=att_bins, range=[-1, 1])
+                count_att += hist_att[0]
+                count_att_diff += hist_att_diff[0]
             out_src, out_cls = self.D(x_fake.detach())
             d_loss_fake = torch.mean(out_src)
 
@@ -276,7 +308,7 @@ class STGANAgent(object):
 
             if (i + 1) % self.config.n_critic == 0:
                 # original-to-target domain
-                if att_diff:
+                if self.config.att_diff:
                     x_fake = self.G(x_real, attr_diff)
                 else:
                     attr_fake = torch.rand_like(c_org)
@@ -287,7 +319,7 @@ class STGANAgent(object):
                 g_loss_cls = self.classification_loss(out_cls, label_trg)
 
                 # target-to-original domain
-                if att_diff:
+                if self.config.att_diff:
                     x_reconst = self.G(x_real, c_org - c_org)
                 else:
                     x_reconst = self.G(x_real, c_org)
@@ -331,6 +363,28 @@ class STGANAgent(object):
                     self.writer.add_scalar(tag, value, self.current_iteration)
 
             if self.current_iteration % self.config.sample_step == 0:
+                
+                if self.config.histogram:
+                    result_path = os.path.join(self.config.histogram_dir, 'hist_color_{}.png'.format(i + 1))
+                    fig, ax = plt.subplots(3,1,figsize=(8,12),sharey=True,sharex=True)
+                    ax[0].set_title('Red')
+                    ax[0].bar(hist_r[1][:-1], count_r, color='r', alpha=0.5)
+                    ax[1].set_title('Blue')
+                    ax[1].bar(hist_g[1][:-1], count_g, color='g', alpha=0.5)
+                    ax[2].set_title('Green')
+                    ax[2].bar(hist_b[1][:-1], count_b, color='b', alpha=0.5)
+                    plt.savefig(result_path)
+                    
+                    fig, ax = plt.subplots(2,1,figsize=(8,10),sharey=True)
+                    bins = hist_att[1]
+                    ax[0].set_title('$att_s$')
+                    ax[0].bar(bins[:-1], count_att, color='b', alpha=0.5,width=1 / att_bins)
+                    bins = hist_att_diff[1]
+                    ax[1].set_title('$att_{diff}$')
+                    ax[1].bar(bins[:-1], count_att_diff, color='b', alpha=0.5,width=2 / att_bins)
+                    result_path = os.path.join(self.config.histogram_dir, 'hist_att_{}.png'.format(i + 1))
+                    plt.savefig(result_path)
+                
                 self.G.eval()
                 with torch.no_grad():
 
@@ -341,7 +395,7 @@ class STGANAgent(object):
 
                         for c_trg_sample in c_sample_list:
 
-                            if att_diff:
+                            if self.config.att_diff:
                                 attr_diff = (c_trg_sample -
                                              c_org_sample).to(self.device)
                                 x_fake = self.G(
@@ -386,7 +440,7 @@ class STGANAgent(object):
                 x_real = x_real[:, :3]
 
                 c_trg_all = self.create_interpolated_attr(
-                    c_org, self.config.attrs, max_val=1.0)
+                    c_org, self.config.attrs, self.config.att_min, self.config.att_max, self.config.num_samples)
 
                 for c_trg_list in c_trg_all:
 
@@ -402,7 +456,7 @@ class STGANAgent(object):
 
                     for c_trg_sample in c_trg_list:
 
-                        if att_diff:
+                        if self.config.att_diff:
                             attr_diff = c_trg_sample.to(
                                 self.device) - c_org.to(self.device)
                             x_fake = self.G(x_real, attr_diff.to(self.device))
