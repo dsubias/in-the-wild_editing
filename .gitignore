@@ -137,6 +137,8 @@ dmypy.json
 # jpg 
 *.jpg
 
+*.zip
+
 # experiments folder
 experiments/
 
@@ -148,3 +150,6 @@ lightning_logs/
 rendering_materials/
 
 data_45k/
+
+pix2normal/
+

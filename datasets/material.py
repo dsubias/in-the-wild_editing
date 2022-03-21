@@ -13,7 +13,7 @@ import cv2
 from matplotlib import pyplot as plt
 
 
-def make_dataset(root, train_file, test_file, mode, selected_attrs):
+def make_dataset(root, train_file, test_file, mode, selected_attrs,att_neg=False,thres_edition=1.0):
     assert mode in ['train', 'val', 'test']
 
     lines_train = [line.rstrip() for line in open(os.path.join(
@@ -29,14 +29,11 @@ def make_dataset(root, train_file, test_file, mode, selected_attrs):
         attr2idx[attr_name] = i
         idx2attr[i] = attr_name
 
-    np.random.seed(10)
-    random.seed(18)
-
     if mode == 'train':
         lines = lines_train[1:]
         print('Train Samples:', len(lines))
     if mode == 'val':  # put in first half a batch of test images, half of training images
-        lines = lines_test[1:33]
+        lines = lines_test[1:]
         print('Validation Samples:', len(lines))
     if mode == 'test':
         # np.random.shuffle(lines_test)
@@ -65,7 +62,12 @@ def make_dataset(root, train_file, test_file, mode, selected_attrs):
         mat_attr = []
         for attr_name in selected_attrs:
             idx = attr2idx[attr_name]
-            mat_attr.append(float(values[idx]))
+            if att_neg:
+                mat_attr.append(float(values[idx]) * (2*thres_edition)- thres_edition)
+                
+            else:
+                mat_attr.append(float(values[idx])* thres_edition)
+        
 
         files.append(filename)
         mat_attrs.append(mat_attr)
@@ -173,8 +175,8 @@ def extract_highlights(image):
 
 
 class MaterialDataset(data.Dataset):
-    def __init__(self, root, train_file, test_file, mode, selected_attrs, disentangled=False, transform=None, mask_input_bg=True, use_illum=False):
-        items = make_dataset(root, train_file, test_file, mode, selected_attrs)
+    def __init__(self, root, train_file, test_file, mode, selected_attrs, disentangled=False, transform=None, mask_input_bg=True, use_illum=False,att_neg=False,thres_edition=1.0):
+        items = make_dataset(root, train_file, test_file, mode, selected_attrs,att_neg,thres_edition)
 
         self.files = items['files']
         self.mat_attrs = items['mat_attrs']
@@ -291,7 +293,7 @@ class MaterialDataset(data.Dataset):
 
 # the main dataloader
 class MaterialDataLoader(object):
-    def __init__(self, root, train_file, test_file, mode, selected_attrs, crop_size=None, image_size=128, batch_size=16, data_augmentation=False, mask_input_bg=True, use_illum=False):
+    def __init__(self, root, train_file, test_file, mode, selected_attrs, crop_size=None, image_size=128, batch_size=16, data_augmentation=True, mask_input_bg=True, use_illum=False,att_neg=False,thres_edition=1.0):
         if mode not in ['train', 'test']:
             return
 
@@ -302,23 +304,24 @@ class MaterialDataLoader(object):
 
         # setup the dataloaders
         train_trf, val_trf = self.setup_transforms(use_illum)
+
         if mode == 'train':
             print("loading data")
             val_set = MaterialDataset(
-                root, train_file, test_file, 'val', selected_attrs, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
+                root, train_file, test_file, 'val', selected_attrs, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum,att_neg=att_neg,thres_edition=thres_edition)
             self.val_loader = data.DataLoader(
                 val_set, batch_size=batch_size, shuffle=False, num_workers=4)
             self.val_iterations = int(math.ceil(len(val_set) / batch_size))
 
             train_set = MaterialDataset(
-                root, train_file, test_file, 'train', selected_attrs, transform=train_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
+                root, train_file, test_file, 'train', selected_attrs, transform=train_trf, mask_input_bg=mask_input_bg, use_illum=use_illum,att_neg=att_neg,thres_edition=thres_edition)
             self.train_loader = data.DataLoader(
                 train_set, batch_size=batch_size, shuffle=True, num_workers=4)
             self.train_iterations = int(math.ceil(len(train_set) / batch_size))
         else:
             batch_size = 32
             test_set = MaterialDataset(
-                root, train_file, test_file,  'test', selected_attrs, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
+                root, train_file, test_file,  'test', selected_attrs, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum,att_neg=att_neg,thres_edition=thres_edition)
             self.test_loader = data.DataLoader(
                 test_set, batch_size=batch_size, shuffle=False, num_workers=4)
             self.test_iterations = int(math.ceil(len(test_set) / batch_size))
@@ -342,6 +345,7 @@ class MaterialDataLoader(object):
         # training transform : data augmentation
         original_size = self.image_size*2
         if self.data_augmentation:
+            
             train_trf = T.Compose([
                 T.Resize(original_size),  # suppose the dataset is of size 256
                 T.RandomHorizontalFlip(0.5),
