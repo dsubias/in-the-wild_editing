@@ -2,6 +2,10 @@ import argparse
 import os
 from agents import STGANAgent
 from utils.config import *
+import torch
+
+# Set resource usage
+torch.set_num_threads(8)
 os.nice(10)
 
 

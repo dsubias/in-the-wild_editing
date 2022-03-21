@@ -44,15 +44,16 @@ def get_config_from_yaml(yaml_file):
     with open(yaml_file, 'r') as config_file:
         try:
             config_dict = yaml.load(config_file, Loader=Loader)
+            file = config_dict
             config = EasyDict(config_dict)
-            return config
+            return config,file
         except ValueError:
             print('INVALID YAML file format.. Please provide a good yaml file')
             exit(-1)
 
 
 def process_config(yaml_file):
-    config = get_config_from_yaml(yaml_file)
+    config, file = get_config_from_yaml(yaml_file)
 
     print(' *************************************** ')
     print(' The experiment name is {} '.format(config.exp_name))
@@ -61,16 +62,24 @@ def process_config(yaml_file):
 
     # create some important directories to be used for that experiments
     config.summary_dir = os.path.join(
-        'experiments', config.exp_name, 'summaries/')
+        '/media/raid/dsubias/experiments', config.exp_name, 'summaries/')
     config.checkpoint_dir = os.path.join(
-        'experiments', config.exp_name, 'checkpoints/')
+        '/media/raid/dsubias/experiments', config.exp_name, 'checkpoints/')
     config.sample_dir = os.path.join(
-        'experiments', config.exp_name, 'samples/')
-    config.log_dir = os.path.join('experiments', config.exp_name, 'logs/')
+        '/media/raid/dsubias/experiments', config.exp_name, 'samples/')
+    config.log_dir = os.path.join('/media/raid/dsubias/experiments', config.exp_name, 'logs/')
     config.result_dir = os.path.join(
-        'experiments', config.exp_name, 'results/')
+        '/media/raid/dsubias/experiments', config.exp_name, 'results/')
     create_dirs([config.summary_dir, config.checkpoint_dir,
                 config.sample_dir, config.log_dir, config.result_dir])
+    if config.histogram:
+        config.histogram_dir = os.path.join(
+        '/media/raid/dsubias/experiments', config.exp_name, 'results/histograms')
+        if not os.path.exists(config.histogram_dir):
+                os.makedirs(config.histogram_dir)
+
+    with open(os.path.join('/media/raid/dsubias/experiments', config.exp_name,'summary.yaml'), 'w') as f:
+        yaml.dump(file, f)
 
     # setup logging in the project
     setup_logging(config.log_dir)

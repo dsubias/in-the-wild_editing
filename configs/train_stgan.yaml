@@ -1,32 +1,35 @@
 # meta
-exp_name: stgan_0-1_256_480
-mode: test
+exp_name: 256_new_lambdas_2
+mode: train
 split: True
-cuda: False
+cuda: True
 ngpu: 1
+gpus: '1'
 
 # data
 dataset: material
-data_root: 'rendering_materials/renders/datasets_allshapes/renders_by_geom_ldr/network_dataset/'
-train_file: 'attributes_dataset_train_new_illum.txt'
+data_root: 'data_45k'
+train_file: 'attributes_dataset_train_new_median.txt'
 test_file: 'attributes_dataset_test_new_daniel.txt'
 crop_size: 480
 image_size: 256
 data_augmentation: True
 mask_input_bg: True
+histogram: True
+histogram_color_type: 'hsv'
 
 # model
-g_conv_dim: 64
-d_conv_dim: 64
-d_fc_dim: 1024
+g_conv_dim: 32
+d_conv_dim: 32
+d_fc_dim: 256
 g_layers: 5
 d_layers: 5
-shortcut_layers: 3
+shortcut_layers: 4
 stu_kernel_size: 3
-use_stu: true
-one_more_conv: true
-attrs: [glossy]
-checkpoint: 110000
+use_stu: True
+deconv: False
+one_more_conv: True
+checkpoint: ~
 
 # training
 batch_size: 32
@@ -35,15 +38,33 @@ beta2: 0.999
 g_lr: 0.0002
 d_lr: 0.0002
 n_critic: 5
-thres_int: 0.5
+thres_int: 1.0
+thres_edition: 1.0
+
+# tradeoff parameters
 lambda_gp: 10
-lambda1: 1
-lambda2: 10
-lambda3: 100
-max_iters: 1000000
-lr_decay_iters: 800000
+lambda_1: 3 # att discriminator (original value = 1)
+lambda_2: 30 # att generator (original value = 10)
+lambda_3: 300 # reconstruction generator (original value = 100)
+lambda_4: 1 # adversarial discriminator
+lambda_5: 1 # adversarial generator
+
+# attributes
+att_activation: 'sigmoid' # 'tanh', 'sigmoid' or ''
+att_loss: 'l1' # 'l1', 'binary_cross_entropy' or 'cross_entropy'
+att_max: 1
+att_min: 0
+num_samples: 9
+att_neg: False
+att_diff: True
+attrs: [glossy]
+uniform: False
+
+# iterations
+max_epochs: 10
+lr_decay_iters: 10000000000000000
 
 # steps:
 summary_step: 100
-sample_step: 1
-checkpoint_step: 100
+sample_step: 750
+checkpoint_step: 750
