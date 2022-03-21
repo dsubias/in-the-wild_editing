@@ -55,8 +55,8 @@ class Normalize:
         if not self.inplace:
             tensor = tensor.clone()
         
-        tensor.sub_(self.mean).div_(self.std)
-        return tensor
+        #tensor.sub_(self.mean).div_(self.std)
+        return (tensor - self.mean ) /  self.std
 
 
 class RandomHorizontalFlip:

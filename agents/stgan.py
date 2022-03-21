@@ -74,9 +74,9 @@ class STGANAgent(object):
         G_filename = 'G_{}.pth.tar'.format(self.config.checkpoint)
         D_filename = 'D_{}.pth.tar'.format(self.config.checkpoint)
         G_checkpoint = torch.load(os.path.join(
-            self.config.checkpoint_dir, G_filename))
+            self.config.checkpoint_dir, G_filename),map_location=self.device)
         D_checkpoint = torch.load(os.path.join(
-            self.config.checkpoint_dir, D_filename))
+            self.config.checkpoint_dir, D_filename),map_location=self.device)
         G_to_load = {k.replace('module.', ''): v for k,
                      v in G_checkpoint['state_dict'].items()}
         D_to_load = {k.replace('module.', ''): v for k,
@@ -124,7 +124,7 @@ class STGANAgent(object):
             alphas = [-max_val, -((max_val-1)/2.0+1), -1, -
                       0.5, 0, 0.5, 1, ((max_val-1)/2.0+1), max_val]
             if max_val == 1:
-                alphas = linspace(0, 1, 9)  # [-1,-0.75,-0.5,0,0.5,1,]
+                alphas = linspace(-1, 2, 9)  # [-1,-0.75,-0.5,0,0.5,1,]
             # alphas = np.linspace(-max_val, max_val, 10)
             for alpha in alphas:
                 c_trg = c_org.clone()
@@ -349,7 +349,6 @@ class STGANAgent(object):
                             if att_diff:
                                 attr_diff = c_trg_sample.to(
                                     self.device) - c_org_sample.to(self.device)
-                                attr_diff = attr_diff * self.config.thres_int
                                 
                                 x_fake = self.G(x_sample, attr_diff.to(
                                     self.device))    
@@ -386,18 +385,56 @@ class STGANAgent(object):
         with torch.no_grad():
             for i, (x_real, c_org) in enumerate(tqdm_loader):
                 x_real = x_real.to(self.device)
-                c_trg_list = self.create_labels(c_org, self.config.attrs)
+                ch_4 = x_real[:,3:]
+                x_real = x_real[:,:3]
+                
+                c_trg_all = self.create_interpolated_attr(
+                                        c_org, self.config.attrs, max_val=1.0)
 
-                x_fake_list = [x_real]
-                for c_trg in c_trg_list:
-                    attr_diff = c_trg - c_org
-                    x_fake_list.append(
-                        self.G(x_real, attr_diff.to(self.device)))
-                x_concat = torch.cat(x_fake_list, dim=3)
-                result_path = os.path.join(
-                    self.config.result_dir, 'sample_{}.png'.format(i + 1))
-                save_image(denorm(x_concat.data.cpu()),
-                           result_path, nrow=1, padding=0)
+                for c_trg_list in c_trg_all:
+                        
+                    if self.config.split:
+                        x_fake_list=[]
+                        for n in range(0,self.config.batch_size):
+
+                            x_fake_list.append([torch.cat([x_real[n], ch_4[n]], dim=0)])
+
+                    else:
+                        x_fake_list = [torch.cat([x_real, ch_4], dim=1)]
+
+                    for c_trg_sample in c_trg_list:
+                                    
+                        if att_diff:
+                            attr_diff = c_trg_sample.to(self.device) - c_org.to(self.device)
+                            x_fake = self.G(x_real, attr_diff.to(self.device))    
+                        else:
+                            x_fake = self.G(x_real, c_trg_sample.to(self.device))         
+                            
+                        if self.config.split:
+                            
+                            for n in range(0,self.config.batch_size):
+                                
+                                x_fake_n = torch.cat([x_fake[n], ch_4[n]], dim=0)
+                                x_fake_list[n].append(x_fake_n)
+                                
+                        else:
+
+                            x_fake = torch.cat([x_fake, ch_4], dim=1)
+                            x_fake_list.append(x_fake)
+                        
+                    if self.config.split:
+                        for n in range(0,self.config.batch_size):
+                            
+                            x_concat = torch.cat(x_fake_list[n], dim=2)
+                            image = make_grid(denorm(x_concat, device=self.device), nrow=1)
+                            result_path = os.path.join(self.config.result_dir, 'sample_{}_{}.png'.format(n,i + 1))
+                            save_image(image,result_path, nrow=1, padding=0)
+                    else:
+                        x_concat = torch.cat(x_fake_list, dim=3)
+                        image = make_grid(denorm(x_concat, device=self.device), nrow=1)
+                        result_path = os.path.join(self.config.result_dir, 'sample_{}.png'.format(i + 1))
+                        save_image(image,result_path, nrow=1, padding=0)
+
 
     def finalize(self):
         print('Please wait while finalizing the operation.. Thank you')

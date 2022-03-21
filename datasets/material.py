@@ -36,13 +36,13 @@ def make_dataset(root, train_file, test_file, mode, selected_attrs):
         lines = lines_train[1:]
         print('Train Samples:', len(lines))
     if mode == 'val':  # put in first half a batch of test images, half of training images
-        lines = lines_test[1:33]
+        lines = lines_test[1:]
         print('Validation Samples:', len(lines))
     if mode == 'test':
         # np.random.shuffle(lines_test)
         #lines_test=[line for line in lines_test if ("@mat" in line)]
         # [:32*2]+random.sample(lines_train,32*4) #for full dataset
-        lines = lines_test[33:]
+        lines = lines_test[1:]
         print('Test Samples', len(lines))
         # #only from one shape/one env
         # shape=""

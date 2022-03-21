@@ -1,6 +1,7 @@
 # meta
 exp_name: stgan_0-1_256_480
-mode: train
+mode: test
+split: True
 cuda: False
 ngpu: 1
 
@@ -25,7 +26,7 @@ stu_kernel_size: 3
 use_stu: true
 one_more_conv: true
 attrs: [glossy]
-checkpoint: 1400
+checkpoint: 110000
 
 # training
 batch_size: 32
@@ -44,5 +45,5 @@ lr_decay_iters: 800000
 
 # steps:
 summary_step: 100
-sample_step: 100
+sample_step: 1
 checkpoint_step: 100
