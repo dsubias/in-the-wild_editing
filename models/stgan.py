@@ -52,13 +52,14 @@ class ConvGRUCell(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, attr_dim, conv_dim=64, n_layers=5, shortcut_layers=2, stu_kernel_size=3, use_stu=True, one_more_conv=True,deconv= False):
+    def __init__(self, attr_dim, conv_dim=64, n_layers=5, shortcut_layers=2, stu_kernel_size=3, use_stu=True, one_more_conv=True,deconv= False,xavier_init=False):
         super(Generator, self).__init__()
         self.n_attrs = attr_dim
         self.n_layers = n_layers
         self.shortcut_layers = min(shortcut_layers, n_layers - 1)
         self.use_stu = use_stu
         self.deconv = deconv
+        self.xavier_init = xavier_init
 
         if not self.deconv:
             self.upsample = nn.Upsample(
@@ -78,6 +79,13 @@ class Generator(nn.Module):
             for i in reversed(range(self.n_layers - 1 - self.shortcut_layers, self.n_layers - 1)):
                 self.stu.append(ConvGRUCell(
                     self.n_attrs, conv_dim * 2 ** i, conv_dim * 2 ** i, stu_kernel_size,deconv=deconv))
+
+        if self.xavier_init:
+            
+            for  i, m in enumerate(self.encoder):
+                
+                if isinstance(m[0],nn.Conv2d):
+                    nn.init.xavier_uniform_(m[0].weight)
 
         self.decoder = nn.ModuleList()
         for i in range(self.n_layers):
@@ -171,7 +179,17 @@ class Generator(nn.Module):
                             nn.Conv2d(in_dim, 3, 3, 1, 1, bias=False),
                             nn.Tanh()
                         ))
+        
+        if self.xavier_init:
+            
+            for i, m in enumerate(self.decoder):
+                
+                if isinstance(m[0],nn.Conv2d):
+                    nn.init.xavier_uniform_(m[0].weight)
 
+                if one_more_conv and i == self.n_layers-1:
+                    nn.init.xavier_uniform_(m[3].weight)
+                
     def forward(self, x, a):
 
         # propagate encoder layers
@@ -215,15 +233,16 @@ class Generator(nn.Module):
                 out = self.decoder[i](out)
             else:
                 out = self.decoder[i](self.upsample(out))
-
+        
         return out
 
 
 class Discriminator(nn.Module):
-    def __init__(self, image_size=128, attr_dim=10, conv_dim=64, fc_dim=1024, n_layers=5,att_activation=None):
+    def __init__(self, image_size=128, attr_dim=10, conv_dim=64, fc_dim=1024, n_layers=5,att_activation=None,xavier_init=False):
         super(Discriminator, self).__init__()
         layers = []
         in_channels = 3
+        self.xavier_init = xavier_init
         for i in range(n_layers):
             layers.append(nn.Sequential(
                 nn.Conv2d(in_channels, conv_dim * 2 ** i, 4, 2, 1),
@@ -233,6 +252,14 @@ class Discriminator(nn.Module):
             ))
             in_channels = conv_dim * 2 ** i
         self.conv = nn.Sequential(*layers)
+
+        if self.xavier_init:
+            
+            for  i, m in enumerate(self.conv):
+                if isinstance(m[0],nn.Conv2d):
+                    nn.init.xavier_uniform_(m[0].weight)
+                    
+
         feature_size = image_size // 2**n_layers
         self.fc_adv = nn.Sequential(
             nn.Linear(conv_dim * 2 ** (n_layers - 1)

@@ -1,16 +1,16 @@
 # meta
-exp_name: 256_new_lambdas_2
-mode: train
+exp_name: 256_new_lambdas_uniform_10
+mode: test
 split: True
 cuda: True
 ngpu: 1
-gpus: '1'
+gpus: '0'
 
 # data
 dataset: material
 data_root: 'data_45k'
 train_file: 'attributes_dataset_train_new_median.txt'
-test_file: 'attributes_dataset_test_new_daniel.txt'
+test_file: 'attributes_dataset_real.txt'
 crop_size: 480
 image_size: 256
 data_augmentation: True
@@ -29,7 +29,7 @@ stu_kernel_size: 3
 use_stu: True
 deconv: False
 one_more_conv: True
-checkpoint: ~
+checkpoint: 12000
 
 # training
 batch_size: 32
@@ -40,12 +40,14 @@ d_lr: 0.0002
 n_critic: 5
 thres_int: 1.0
 thres_edition: 1.0
+g_xavier_init: False
+d_xavier_init: False
 
 # tradeoff parameters
 lambda_gp: 10
-lambda_1: 3 # att discriminator (original value = 1)
-lambda_2: 30 # att generator (original value = 10)
-lambda_3: 300 # reconstruction generator (original value = 100)
+lambda_1: 10 # att discriminator (original value = 1)
+lambda_2: 100 # att generator (original value = 10)
+lambda_3: 1000 # reconstruction generator (original value = 100)
 lambda_4: 1 # adversarial discriminator
 lambda_5: 1 # adversarial generator
 
@@ -58,10 +60,10 @@ num_samples: 9
 att_neg: False
 att_diff: True
 attrs: [glossy]
-uniform: False
+uniform: True
 
 # iterations
-max_epochs: 10
+max_epochs: 45
 lr_decay_iters: 10000000000000000
 
 # steps:

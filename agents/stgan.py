@@ -40,9 +40,9 @@ class STGANAgent(object):
         self.logger.info("Creating STGAN architecture...")
 
         self.G = Generator(len(self.config.attrs), self.config.g_conv_dim, self.config.g_layers,
-                           self.config.shortcut_layers, use_stu=self.config.use_stu, one_more_conv=self.config.one_more_conv,deconv= self.config.deconv)
+                           self.config.shortcut_layers, use_stu=self.config.use_stu, one_more_conv=self.config.one_more_conv,deconv= self.config.deconv,xavier_init=self.config.g_xavier_init)
         self.D = Discriminator(self.config.image_size, len(
-            self.config.attrs), self.config.d_conv_dim, self.config.d_fc_dim, self.config.d_layers,self.config.att_activation)
+            self.config.attrs), self.config.d_conv_dim, self.config.d_fc_dim, self.config.d_layers,self.config.att_activation,xavier_init=self.config.d_xavier_init)
 
         self.data_loader = globals()['{}_loader'.format(self.config.dataset)](
             self.config.data_root, self.config.train_file, self.config.test_file, self.config.mode, self.config.attrs,
@@ -227,13 +227,16 @@ class STGANAgent(object):
             init_iteration = int(self.config.checkpoint % self.data_loader.train_iterations)
         else:
             init_iteration = 0
+
         data_iter = iter(self.data_loader.train_loader)
         start_time = time.time()
+        self.D.train()
+        self.G.train()
+
         for epoch in range(self.current_epoch, self.config.max_epochs):
             
             for batch in trange(init_iteration, self.data_loader.train_iterations, desc='Epoch {}'.format(epoch),leave=(epoch==self.config.max_epochs-1)):
-                self.D.train()
-                self.G.train()
+                
                 # =================================================================================== #
                 #                             1. Preprocess input data                                #
                 # =================================================================================== #
@@ -307,7 +310,6 @@ class STGANAgent(object):
                             count_v += hist_v
 
                 x_real = x_real[:, :3]
-                
                 c_org = c_org.to(self.device)           # original domain labels
                 c_trg = c_trg.to(self.device)           # target domain labels
                 # labels for computing classification loss
@@ -324,8 +326,10 @@ class STGANAgent(object):
                     out_src, out_cls = self.D(x_real)
                     d_loss_real = - torch.mean(out_src)
                     if self.config.att_loss == 'cross_entropy':
+                        print('F')
                         d_loss_cls = self.loss_cross_entropy(out_cls,label_org)
                     elif self.config.att_loss == 'binary_cross_entropy':
+                        print('FF')
                         d_loss_cls = self.classification_loss(out_cls, label_org)
                     elif self.config.att_loss == 'l1':
                         d_loss_cls = self.regression_loss(out_cls, label_org) 
@@ -333,10 +337,11 @@ class STGANAgent(object):
                     # compute loss with fake images
                     if self.config.att_diff:
                         attr_diff = c_trg - c_org
+
                         if self.config.uniform: 
                             attr_diff = attr_diff * self.config.thres_int
                         else:
-                            attr_diff = attr_diff *  torch.rand_like(attr_diff) * self.config.thres_int
+                            attr_diff = attr_diff # *  torch.rand_like(attr_diff) * self.config.thres_int
                         x_fake = self.G(x_real, attr_diff)
 
                     else:
@@ -404,9 +409,11 @@ class STGANAgent(object):
                 g_loss_adv = - torch.mean(out_src)
 
                 if self.config.att_loss == 'cross_entropy':
+                    print('F')
                     g_loss_cls = self.loss_cross_entropy(out_cls, label_trg)
 
                 elif self.config.att_loss == 'binary_cross_entropy':
+                    print('FF')
                     g_loss_cls = self.classification_loss(out_cls, label_trg)
 
                 elif self.config.att_loss == 'l1':
@@ -537,6 +544,8 @@ class STGANAgent(object):
                             del x_concat
                             del image
                 
+                    self.G.train()
+
                 if  self.current_iteration % self.config.checkpoint_step == 0:
                     self.save_checkpoint()
 
