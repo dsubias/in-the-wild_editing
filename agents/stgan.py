@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from numpy.core.function_base import linspace
 from tqdm import tqdm, trange
 from utils.misc import print_cuda_statistics
-from models.stgan import Generator, Discriminator
+from models.stgan import *
 from datasets import *
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
@@ -44,6 +44,9 @@ class STGANAgent(object):
         self.D = Discriminator(self.config.image_size, len(
             self.config.attrs), self.config.d_conv_dim, self.config.d_fc_dim, self.config.d_layers,self.config.att_activation,xavier_init=self.config.d_xavier_init)
 
+        if  self.config.use_ld:
+            self.LD = Latent_Discriminator(num_attrs=len(self.config.attrs),image_size=self.config.image_size,xavier_init=self.config.ld_xavier_init,att_activation=self.config.att_activation)
+
         self.data_loader = globals()['{}_loader'.format(self.config.dataset)](
             self.config.data_root, self.config.train_file, self.config.test_file, self.config.mode, self.config.attrs,
             self.config.crop_size, self.config.image_size, self.config.batch_size, self.config.data_augmentation, mask_input_bg=config.mask_input_bg,att_neg=self.config.att_neg,thres_edition=self.config.thres_edition)
@@ -71,17 +74,31 @@ class STGANAgent(object):
             'state_dict': self.D.state_dict(),
             'optimizer': self.optimizer_D.state_dict(),
         }
+            
         G_filename = 'G_{}.pth.tar'.format(self.current_iteration)
         D_filename = 'D_{}.pth.tar'.format(self.current_iteration)
+        
+
         torch.save(G_state, os.path.join(
             self.config.checkpoint_dir, G_filename))
         torch.save(D_state, os.path.join(
             self.config.checkpoint_dir, D_filename))
 
+        if  self.config.use_ld:
+            LD_state = {
+                'state_dict': self.LD.state_dict(),
+                'optimizer': self.optimizer_LD.state_dict(),
+            }
+            LD_filename = 'LD_{}.pth.tar'.format(self.current_iteration)
+            torch.save(LD_state, os.path.join(
+                        self.config.checkpoint_dir, LD_filename))
+                        
     def load_checkpoint(self):
         if self.config.checkpoint is None:
             self.G.to(self.device)
             self.D.to(self.device)
+            if self.config.use_ld:
+                self.LD.to(self.device)
             return
         G_filename = 'G_{}.pth.tar'.format(self.config.checkpoint)
         G_checkpoint = torch.load(os.path.join(
@@ -103,6 +120,16 @@ class STGANAgent(object):
             self.current_iteration = self.config.checkpoint
             self.optimizer_G.load_state_dict(G_checkpoint['optimizer'])
             self.optimizer_D.load_state_dict(D_checkpoint['optimizer'])
+
+            if  self.config.use_ld:
+                LD_filename = 'LD_{}.pth.tar'.format(self.config.checkpoint)
+                LD_checkpoint = torch.load(os.path.join(
+                self.config.checkpoint_dir, LD_filename), map_location=self.device)
+                LD_to_load = {k.replace('module.', ''): v for k,
+                        v in LD_checkpoint['state_dict'].items()}
+                self.LD.load_state_dict(LD_to_load)
+                self.LD.to(self.device)
+                self.optimizer_LD.load_state_dict(LD_checkpoint['optimizer'])
 
     def create_interpolated_attr(self, c_org, selected_attrs=None,att_min=-1, att_max=1, num_samples=9):
         """Generate target domain labels for debugging and testing: linearly sample attribute. Contains a list for each attr"""
@@ -153,11 +180,16 @@ class STGANAgent(object):
         return torch.mean((dydx_l2norm-1)**2)
 
     def run(self):
-        assert self.config.mode in ['train', 'test']
+        assert self.config.mode in ['train', 'test','latent']
         # try:
         if self.config.mode == 'train':
 
             self.train()
+
+        elif self.config.mode == 'latent':
+
+            self.latent()
+
         else:
             self.test()
         # except KeyboardInterrupt:
@@ -180,6 +212,13 @@ class STGANAgent(object):
             self.optimizer_G, step_size=self.config.lr_decay_iters, gamma=0.1)
         self.lr_scheduler_D = optim.lr_scheduler.StepLR(
             self.optimizer_D, step_size=self.config.lr_decay_iters, gamma=0.1)
+        
+        if  self.config.use_ld:
+
+            self.optimizer_LD = optim.Adam(self.LD.parameters(), self.config.d_lr, [
+            self.config.beta1, self.config.beta2])
+            self.lr_scheduler_LD = optim.lr_scheduler.StepLR(
+            self.optimizer_LD, step_size=self.config.lr_decay_iters, gamma=0.1)
 
         self.load_checkpoint()
 
@@ -188,6 +227,9 @@ class STGANAgent(object):
                 self.G, device_ids=list(range(self.config.ngpu)))
             self.D = nn.DataParallel(
                 self.D, device_ids=list(range(self.config.ngpu)))
+            if  self.config.use_ld:
+                self.LD = nn.DataParallel(
+                    self.LD, device_ids=list(range(self.config.ngpu)))
 
         val_iter = iter(self.data_loader.val_loader)
 
@@ -202,6 +244,7 @@ class STGANAgent(object):
 
         self.g_lr = self.lr_scheduler_G.get_lr()[0]
         self.d_lr = self.lr_scheduler_D.get_lr()[0]
+        self.ld_lr = self.lr_scheduler_D.get_lr()[0]
 
         if self.config.histogram:
             nb_bins = 256
@@ -232,13 +275,15 @@ class STGANAgent(object):
         start_time = time.time()
         self.D.train()
         self.G.train()
+        if self.config.use_ld:
+            self.LD.train()
 
         for epoch in range(self.current_epoch, self.config.max_epochs):
             
             for batch in trange(init_iteration, self.data_loader.train_iterations, desc='Epoch {}'.format(epoch),leave=(epoch==self.config.max_epochs-1)):
                 
                 # =================================================================================== #
-                #                             1. Preprocess input data                                #
+                #                             0. Preprocess input data                                #
                 # =================================================================================== #
 
                 # fetch real images and labels
@@ -248,24 +293,8 @@ class STGANAgent(object):
                     data_iter = iter(self.data_loader.train_loader)
                     x_real, label_org = next(data_iter)
 
-                # generate target domain labels randomly
-                rand_idx = torch.randperm(label_org.size(0))
-                if self.config.att_neg:
-                    if self.config.uniform:
-                        label_trg = torch.rand_like(label_org) * ( 2* self.config.thres_edition) - self.config.thres_edition
-                    else:
-                        label_trg = label_org[rand_idx]  * self.config.thres_edition
-                else:
-
-                    if self.config.uniform:
-                        label_trg = torch.rand_like(label_org) * self.config.thres_edition
-                    else:
-                        label_trg = label_org[rand_idx] * self.config.thres_edition
-
-                c_org = label_org.clone()
-                c_trg = label_trg.clone()
                 x_real = x_real.to(self.device)         # input images
-                
+                c_org = label_org.clone()
                 # data color histogram
                 if self.config.histogram:
                     de_norm = denorm(x_real, device=self.device)
@@ -311,11 +340,25 @@ class STGANAgent(object):
 
                 x_real = x_real[:, :3]
                 c_org = c_org.to(self.device)           # original domain labels
-                c_trg = c_trg.to(self.device)           # target domain labels
                 # labels for computing classification loss
                 label_org = label_org.to(self.device)
-                # labels for computing classification loss
-                label_trg = label_trg.to(self.device)
+
+                # =================================================================================== #
+                #                         1. Train the latent discriminator                           #
+                # =================================================================================== #
+                scalars = {}
+                if self.config.use_ld:
+
+                    z,_ = self.G.encode(x_real)
+
+                    for i in range(self.config.ld_n_critic):
+
+                        out_att = self.LD(z)
+                        ld_loss = self.regression_loss(out_att, label_org)
+                        self.optimizer_LD.zero_grad()
+                        ld_loss.backward(retain_graph=True)
+                        self.optimizer_LD.step()
+                        scalars['LD/loss'] = ld_loss.item()
 
                 # =================================================================================== #
                 #                             2. Train the discriminator                              #
@@ -333,6 +376,26 @@ class STGANAgent(object):
                         d_loss_cls = self.classification_loss(out_cls, label_org)
                     elif self.config.att_loss == 'l1':
                         d_loss_cls = self.regression_loss(out_cls, label_org) 
+
+
+                    # generate target domain labels randomly
+                    rand_idx = torch.randperm(label_org.size(0))
+                    if self.config.att_neg:
+                        if self.config.uniform:
+                            label_trg = torch.rand_like(label_org) * ( 2* self.config.thres_edition) - self.config.thres_edition
+                        else:
+                            label_trg = label_org[rand_idx]  * self.config.thres_edition
+                    else:
+
+                        if self.config.uniform:
+                            label_trg = torch.rand_like(label_org) * self.config.thres_edition
+                        else:
+                            label_trg = label_org[rand_idx] * self.config.thres_edition
+
+                    # labels for computing classification loss
+                    label_trg = label_trg.to(self.device)
+                    c_trg = label_trg.clone()
+                    c_trg = c_trg.to(self.device)           # target domain labels
 
                     # compute loss with fake images
                     if self.config.att_diff:
@@ -373,8 +436,7 @@ class STGANAgent(object):
                     # compute loss for gradient penalty
                     alpha = torch.rand(x_real.size(0), 1, 1, 1).to(self.device)
 
-                    x_hat = (alpha * x_real.data + (1 - alpha)
-                            * x_fake.data).requires_grad_(True)
+                    x_hat = (alpha * x_real.data + (1 - alpha)* x_fake.data).requires_grad_(True)
 
                     out_src, _ = self.D(x_hat)
                     d_loss_gp = self.gradient_penalty(out_src, x_hat)
@@ -387,7 +449,7 @@ class STGANAgent(object):
                     self.optimizer_D.step()
 
                     # summarize
-                    scalars = {}
+                    
                     scalars['D/loss'] = d_loss.item()
                     scalars['D/loss_adv'] = d_loss_adv.item()
                     scalars['D/loss_cls'] = d_loss_cls.item()
@@ -399,11 +461,37 @@ class STGANAgent(object):
                 #                               3. Train the generator                                #
                 # =================================================================================== #
 
-                # original-to-target domain
-                if self.config.att_diff:
-                    x_fake = self.G(x_real, attr_diff)
+                rand_idx = torch.randperm(label_org.size(0))
+                if self.config.att_neg:
+                    if self.config.uniform:
+                        label_trg = torch.rand_like(label_org) * ( 2* self.config.thres_edition) - self.config.thres_edition
+                    else:
+                            label_trg = label_org[rand_idx]  * self.config.thres_edition
                 else:
-                    x_fake = self.G(x_real, c_trg)
+
+                    if self.config.uniform:
+                        label_trg = torch.rand_like(label_org) * self.config.thres_edition
+                    else:
+                        label_trg = label_org[rand_idx] * self.config.thres_edition
+
+                # labels for computing classification loss
+                label_trg = label_trg.to(self.device)
+                c_trg = label_trg.clone()
+                c_trg = c_trg.to(self.device)           # target domain labels  
+                
+                # compute loss with fake images
+                if self.config.att_diff:
+                    attr_diff = c_trg - c_org
+
+                    if self.config.uniform: 
+                            attr_diff = attr_diff * self.config.thres_int
+                    else:
+                        attr_diff = attr_diff # *  torch.rand_like(attr_diff) * self.config.thres_int
+                    x_fake = self.G(x_real, attr_diff)
+
+                else:
+                        
+                    x_fake = self.G(x_real, c_trg)  
 
                 out_src, out_cls = self.D(x_fake)
                 g_loss_adv = - torch.mean(out_src)
@@ -422,11 +510,14 @@ class STGANAgent(object):
 
                 # target-to-original domain
                 if self.config.att_diff:
+                    
                     x_reconst = self.G(x_real, c_org - c_org)
                 else:
+                    
                     x_reconst = self.G(x_real, c_org)
 
                 g_loss_rec = torch.mean(torch.abs(x_real - x_reconst))
+                
 
                 # compute the PSNR
                 img_mse = self.img2mse(x_reconst, x_real)
@@ -435,6 +526,14 @@ class STGANAgent(object):
                 # backward and optimize
                 g_loss = self.config.lambda_5 * g_loss_adv + self.config.lambda_3 * \
                     g_loss_rec + self.config.lambda_2 * g_loss_cls
+
+                if self.config.use_ld:
+                    z,_ = self.G.encode(x_real)
+                    out_att = self.LD(z)
+                    g_loss_latent = self.regression_loss(out_att, label_org) 
+                    g_loss += self.config.lambda_2 *  g_loss_latent
+                    scalars['G/loss_latent'] = g_loss_latent.item()
+
                 self.optimizer_G.zero_grad()
                 g_loss.backward()
                 self.optimizer_G.step()
@@ -486,7 +585,12 @@ class STGANAgent(object):
                             ax[2].set_facecolor('coral')
                             plt.savefig(result_path)
                            
-                        fig, ax = plt.subplots(3,1,figsize=(8,10))
+                        if self.config.att_diff:
+                            num_att_hist = 3
+                        else:
+                            num_att_hist = 2
+                            
+                        fig, ax = plt.subplots(num_att_hist,1,figsize=(8,10))
                         bins = hist_att[1]
                         ax[0].set_title('$att_s$')
                         if self.config.att_neg:
@@ -564,6 +668,8 @@ class STGANAgent(object):
 
         self.G.eval()
         with torch.no_grad():
+            psnr_file = open(os.path.join(
+                                self.config.sample_dir, 'psnr.txt'),'w')
             for i, (x_real, c_org) in enumerate(tqdm_loader):
                 x_real = x_real.to(self.device)
                 ch_4 = x_real[:, 3:]
@@ -608,14 +714,21 @@ class STGANAgent(object):
                             x_fake_list.append(x_fake)
 
                     if self.config.split:
+                        
                         for n in range(0, x_real.shape[0]):
+                            name = 'sample_{}_{}_[{},{}].png'.format(n, i + 1,self.config.att_min,self.config.att_max)
+                            real = x_fake_list[n][0]
+                            rec = x_fake_list[n][5]
+                            mse=self.img2mse(real,rec)
+                            psnr_file.write(name+' '+str(self.mse2psnr(mse).item())+'\n')
 
                             x_concat = torch.cat(x_fake_list[n], dim=2)
                             image = make_grid(
                                 denorm(x_concat, device=self.device), nrow=1)
                             result_path = os.path.join(
-                                self.config.sample_dir, 'sample_{}_{}_[{},{}].png'.format(n, i + 1,self.config.att_min,self.config.att_max))
+                                self.config.sample_dir, name)
                             save_image(image, result_path, nrow=1, padding=0)
+                        
                     else:
                         x_concat = torch.cat(x_fake_list, dim=3)
                         image = make_grid(
@@ -623,6 +736,45 @@ class STGANAgent(object):
                         result_path = os.path.join(
                             self.config.sample_dir, 'sample_{}.png'.format(i + 1))
                         save_image(image, result_path, nrow=1, padding=0)
+        psnr_file.close()               
+    def latent(self):
+        self.load_checkpoint()
+        self.G.to(self.device)
+
+
+        tqdm_loader = tqdm(self.data_loader.train_loader, total=self.data_loader.train_iterations,
+                            desc='Testing at checkpoint {}'.format(self.config.checkpoint))
+            
+        lentents = torch.tensor([]).to(self.device)
+        self.G.eval()
+        with torch.no_grad():
+
+            for i, (x_real, c_org) in enumerate(tqdm_loader):
+                x_real = x_real.to(self.device)
+                ch_4 = x_real[:, 3:]
+                x_real = x_real[:, :3]
+                attr_diff =  c_org.to(self.device) - c_org.to(self.device)
+                x_fake,z = self.G(x_real, attr_diff.to(self.device))
+                lentents = torch.cat([lentents, z], dim=0)
+
+                if i == 100:
+                    break
+
+            n =1000
+            compare = torch.zeros(n, n).to(self.device) + (-1)
+
+            for i  in trange(n):
+
+                for m  in range(n):
+                    
+                    compare[i,m] = torch.norm(lentents[i]-lentents[m])
+
+            compare=torch.log(compare)
+            fig, ax = plt.subplots()
+            mat=ax.matshow(compare.cpu().numpy(), cmap=cm.jet)
+            plt.colorbar(mat)
+            plt.savefig('lantents.png')
+
 
     def finalize(self):
         print('Please wait while finalizing the operation.. Thank you')

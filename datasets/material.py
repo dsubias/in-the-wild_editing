@@ -61,14 +61,15 @@ def make_dataset(root, train_file, test_file, mode, selected_attrs,att_neg=False
         values = split[1:]
         mat_attr = []
         for attr_name in selected_attrs:
+
             idx = attr2idx[attr_name]
+
             if att_neg:
                 mat_attr.append(float(values[idx]) * (2*thres_edition)- thres_edition)
                 
             else:
                 mat_attr.append(float(values[idx])* thres_edition)
         
-
         files.append(filename)
         mat_attrs.append(mat_attr)
 
@@ -210,6 +211,7 @@ class MaterialDataset(data.Dataset):
 
         # OpenCV version
         # read image
+
         image_rgb = cv2.cvtColor(cv2.imread(os.path.join(
             self.root, "renderings", self.files[index]), 1), cv2.COLOR_BGR2RGB)
         size = image_rgb.shape[0]
@@ -266,7 +268,7 @@ class MaterialDataset(data.Dataset):
         #     mask = Image.new('L',normals.size,255)
         #     normals.putalpha(mask)
         # image.putalpha(mask)
-
+        #print(image.shape)
         # apply the transforms
         if self.transform is not None:
             if self.use_illum:
@@ -285,6 +287,7 @@ class MaterialDataset(data.Dataset):
         if self.disentangled:
             return image, illum, torch.FloatTensor(mat_attr)
         else:
+            
             return image, torch.FloatTensor(mat_attr)
 
     def __len__(self):
@@ -294,7 +297,7 @@ class MaterialDataset(data.Dataset):
 # the main dataloader
 class MaterialDataLoader(object):
     def __init__(self, root, train_file, test_file, mode, selected_attrs, crop_size=None, image_size=128, batch_size=16, data_augmentation=True, mask_input_bg=True, use_illum=False,att_neg=False,thres_edition=1.0):
-        if mode not in ['train', 'test']:
+        if mode not in ['train', 'test','latent']:
             return
 
         self.root = root
@@ -305,7 +308,7 @@ class MaterialDataLoader(object):
         # setup the dataloaders
         train_trf, val_trf = self.setup_transforms(use_illum)
 
-        if mode == 'train':
+        if mode == 'train' or mode == 'latent':
             print("loading data")
             val_set = MaterialDataset(
                 root, train_file, test_file, 'val', selected_attrs, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum,att_neg=att_neg,thres_edition=thres_edition)
@@ -325,7 +328,6 @@ class MaterialDataLoader(object):
             self.test_loader = data.DataLoader(
                 test_set, batch_size=batch_size, shuffle=False, num_workers=4)
             self.test_iterations = int(math.ceil(len(test_set) / batch_size))
-    #
 
     def setup_transforms(self, use_illum):
         global T
@@ -343,7 +345,7 @@ class MaterialDataLoader(object):
             T.Normalize(mean=(0.5, 0.5, 0.5, 0), std=(0.5, 0.5, 0.5, 1))
         ])
         # training transform : data augmentation
-        original_size = self.image_size*2
+        original_size = self.image_size *2
         if self.data_augmentation:
             
             train_trf = T.Compose([

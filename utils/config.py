@@ -77,9 +77,9 @@ def process_config(yaml_file):
         'experiments', config.exp_name, 'results/histograms')
         if not os.path.exists(config.histogram_dir):
                 os.makedirs(config.histogram_dir)
-
-    with open(os.path.join('experiments', config.exp_name,'summary.yaml'), 'w') as f:
-        yaml.dump(file, f)
+    if config.mode=='train':
+        with open(os.path.join('experiments', config.exp_name,'summary.yaml'), 'w') as f:
+            yaml.dump(file, f)
 
     # setup logging in the project
     setup_logging(config.log_dir)
