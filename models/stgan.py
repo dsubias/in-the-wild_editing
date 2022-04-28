@@ -3,8 +3,6 @@ import torch.nn as nn
 from torchsummary import summary
 import numpy as np
 
-torch.manual_seed(1)
-
 # custom weights initialization called on netG and netD
 def initialize_weights(m):
   if isinstance(m, nn.Conv2d):
@@ -352,9 +350,6 @@ class Latent_Discriminator(nn.Module):
         p = self.fc1(p)
         p = self.fc2(p)
         p = self.act(p)
-
-        #p = self.dp1(self.fc1(p))
-        #p = self.dp2(self.fc2(p))
 
         return p
 

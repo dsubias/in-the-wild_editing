@@ -17,7 +17,7 @@ DIR = 'data_iters'
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument(
             '--config',
-            default=None,
+            default='configs/train_stgan.yaml',
             help='The path of configuration file in yaml format')
 args = arg_parser.parse_args()
 config = process_config(args.config)
@@ -41,7 +41,7 @@ if not os.path.exists(DIR):
     os.makedirs(DIR)
 
 b = 0
-for batch in trange(0, data_loader.train_iterations, desc='Epoch {}'.format(0),leave=(0==config.max_epochs-1)):
+for batch in trange(0, 3, desc='Epoch {}'.format(0),leave=(0==config.max_epochs-1)):
 
     x_real, label_org = next(data_iter)
 

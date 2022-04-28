@@ -1,5 +1,5 @@
 import os
-PATH = 'data_45k/attributes_dataset_train_256_old.txt'
+PATH = 'data_45k/attributes_dataset_train_new_median.txt'
 
 
 f = open(PATH,"r")
@@ -23,6 +23,6 @@ lines = out.readlines()
 
 for line in lines[1:]:
     values = line.split()
-    os.system("cp data_45k/renderings/" + values[0][:len(line)-1] + " data_45k/renderings/glossy_0_256")
+    os.system("cp data_45k/renderings/" + values[0][:len(line)-1] + " data_45k/renderings/no_glossy")
     
     

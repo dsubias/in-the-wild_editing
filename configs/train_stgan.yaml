@@ -1,5 +1,5 @@
 # meta
-exp_name: 128_dst
+exp_name: 256_average_all
 mode: train
 split: True
 cuda: True
@@ -9,19 +9,21 @@ gpus: '0'
 # data
 dataset: material
 data_root: 'data_45k'
-train_file: 'attributes_dataset_train_256_old.txt'
-test_file: 'attributes_dataset_test_full_old.txt'
-crop_size: 240
-image_size: 128
+train_file: 'attributes_dataset_train_new_average.txt'
+test_file: 'attributes_dataset_synthetic.txt'
+crop_size: 480
+image_size: 256
 data_augmentation: True
 mask_input_bg: True
 histogram: True
 histogram_color_type: 'hsv'
+add_bg: False
+add_org: False
 
 # model
-g_conv_dim: 64
-d_conv_dim: 64
-d_fc_dim: 1024
+g_conv_dim: 32
+d_conv_dim: 32
+d_fc_dim: 256
 g_layers: 5
 d_layers: 5
 shortcut_layers: 4
@@ -29,10 +31,10 @@ stu_kernel_size: 3
 use_stu: True
 deconv: False
 one_more_conv: True
-checkpoint: 40000
+checkpoint: 42000
 
 # training
-batch_size: 32
+batch_size: 16
 beta1: 0.5
 beta2: 0.999
 g_lr: 0.0002
@@ -62,14 +64,14 @@ att_min: 0
 num_samples: 9
 att_neg: False
 att_diff: False
-attrs: [glossy]
+attrs: [plastic,	rubber,	metallic,	glossy,	bright,	rough,	refstrng,	refsharp	]
 uniform: True
 
 # iterations
-max_epochs: 300
-lr_decay_iters: 10000000000000000
+max_epochs: 40
+lr_decay_iters: 100000000
 
 # steps:
-summary_step: 20
-sample_step: 750
-checkpoint_step: 5000
+summary_step: 200
+sample_step: 1500
+checkpoint_step: 1500
