@@ -61,14 +61,15 @@ def make_dataset(root, train_file, test_file, mode, selected_attrs,att_neg=False
         values = split[1:]
         mat_attr = []
         for attr_name in selected_attrs:
+
             idx = attr2idx[attr_name]
+
             if att_neg:
                 mat_attr.append(float(values[idx]) * (2*thres_edition)- thres_edition)
                 
             else:
                 mat_attr.append(float(values[idx])* thres_edition)
         
-
         files.append(filename)
         mat_attrs.append(mat_attr)
 
@@ -163,7 +164,13 @@ def list2idxs(l):
 
 
 def extract_highlights(image):
-    mask = (image[:, :, 3:]/255.0)
+    mask = ~image[:, :, 3:]
+    cv2.imwrite("mask.png", mask)
+    cv2.imwrite('img.png', image[:,:,:3])
+    img = image[:,:,:3]
+    res = cv2.bitwise_and(img,img,mask = mask)
+    cv2.imwrite('res.png', res)
+    #exit()
     image_bw = np.sum(image[:, :, :3] * [0.299, 0.587,
                       0.114], axis=2, keepdims=True)*mask
     # print(image_bw.shape,image.shape)
@@ -171,7 +178,7 @@ def extract_highlights(image):
     image_ma = np.ma.masked_array(image_bw, 1-mask)
     med = np.ma.median(image_ma)
     image_high = np.clip(image_bw-med, 0, 255).astype(np.uint8)  # +med
-    return image_high
+    return res
 
 
 class MaterialDataset(data.Dataset):
@@ -241,18 +248,26 @@ class MaterialDataset(data.Dataset):
         if (self.use_illum):
             illum = cv2.imread(os.path.join(
                 self.root, "illum", self.files[index]), -1)
-            if (not type(illum) is np.ndarray):
+
+            
+            if True:
                 illum = extract_highlights(image)
-                illum = np.concatenate(
-                    [illum, illum, illum], axis=2)  # 3channels?
+                #illum = np.concatenate([illum, illum, illum], axis=2)  # 3channels?
+                #print(illum.shape)
+                #exit()
+
             else:
+
                 if illum.ndim == 3:  # RGB image
                     # or cv2.COLOR_BGR2GRAY
                     illum = cv2.cvtColor(illum, cv2.COLOR_BGR2RGB)
+
                 else:
                     illum = illum[:, :, np.newaxis]  # image is already B&W
                     illum = np.concatenate([illum, illum, illum], axis=2)
+
         else:
+
             illum = torch.Tensor()
 
         # PIL version: faster but apply the alpha channel when resizing
@@ -266,11 +281,11 @@ class MaterialDataset(data.Dataset):
         #     mask = Image.new('L',normals.size,255)
         #     normals.putalpha(mask)
         # image.putalpha(mask)
-
+        #print(image.shape)
         # apply the transforms
         if self.transform is not None:
             if self.use_illum:
-                image, normals, illum = self.transform(image, normals, illum)
+                image, normals, illum, = self.transform(image, normals, illum)
             else:
                 image, normals = self.transform(image, normals)
 
@@ -279,13 +294,17 @@ class MaterialDataset(data.Dataset):
         # mask the input image if asked
         if self.mask_input_bg:
             image = image*image[3:]
-            if self.use_illum:
-                illum = illum*image[3:]
+            #if self.use_illum:
+                #illum = illum*image[3:]
 
         if self.disentangled:
             return image, illum, torch.FloatTensor(mat_attr)
         else:
-            return image, torch.FloatTensor(mat_attr)
+            if self.mode == 'test':
+                filename = self.files[index].split('/')[1][:-4]
+                return image, torch.FloatTensor(mat_attr) , filename, illum
+            else:
+                return image, torch.FloatTensor(mat_attr)
 
     def __len__(self):
         return len(self.files)
@@ -294,7 +313,7 @@ class MaterialDataset(data.Dataset):
 # the main dataloader
 class MaterialDataLoader(object):
     def __init__(self, root, train_file, test_file, mode, selected_attrs, crop_size=None, image_size=128, batch_size=16, data_augmentation=True, mask_input_bg=True, use_illum=False,att_neg=False,thres_edition=1.0):
-        if mode not in ['train', 'test']:
+        if mode not in ['train', 'test','latent']:
             return
 
         self.root = root
@@ -303,9 +322,12 @@ class MaterialDataLoader(object):
         self.crop_size = crop_size
 
         # setup the dataloaders
+        if mode=='test':
+            use_illum=True
+            self.data_augmentation = False
         train_trf, val_trf = self.setup_transforms(use_illum)
 
-        if mode == 'train':
+        if mode == 'train' or mode == 'latent':
             print("loading data")
             val_set = MaterialDataset(
                 root, train_file, test_file, 'val', selected_attrs, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum,att_neg=att_neg,thres_edition=thres_edition)
@@ -319,13 +341,12 @@ class MaterialDataLoader(object):
                 train_set, batch_size=batch_size, shuffle=True, num_workers=4)
             self.train_iterations = int(math.ceil(len(train_set) / batch_size))
         else:
-            batch_size = 32
+            batch_size = 1
             test_set = MaterialDataset(
                 root, train_file, test_file,  'test', selected_attrs, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum,att_neg=att_neg,thres_edition=thres_edition)
             self.test_loader = data.DataLoader(
-                test_set, batch_size=batch_size, shuffle=False, num_workers=4)
+                test_set, batch_size=batch_size, shuffle=False, num_workers=1)
             self.test_iterations = int(math.ceil(len(test_set) / batch_size))
-    #
 
     def setup_transforms(self, use_illum):
         global T
@@ -343,7 +364,7 @@ class MaterialDataLoader(object):
             T.Normalize(mean=(0.5, 0.5, 0.5, 0), std=(0.5, 0.5, 0.5, 1))
         ])
         # training transform : data augmentation
-        original_size = self.image_size*2
+        original_size = self.image_size *2
         if self.data_augmentation:
             
             train_trf = T.Compose([
@@ -352,7 +373,7 @@ class MaterialDataLoader(object):
                 T.RandomVerticalFlip(0.5),
                 T.Random180DegRot(0.5),
                 T.Random90DegRotClockWise(0.5),
-                T.Albumentations(50, 50, 0.5),  # change in color
+                T.Albumentations(100, 100, 0.5),  # change in color
                 T.RandomCrop(size=self.crop_size),
                 T.RandomResize(low=original_size,
                                high=int(original_size*1.1718)),
