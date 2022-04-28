@@ -1,16 +1,16 @@
 # meta
 exp_name: 256_new_lambdas_2
-mode: train
+mode: test
 split: True
 cuda: True
 ngpu: 1
-gpus: '1'
+gpus: '0'
 
 # data
 dataset: material
 data_root: 'data_45k'
 train_file: 'attributes_dataset_train_new_median.txt'
-test_file: 'attributes_dataset_test_new_daniel.txt'
+test_file: 'attributes_dataset_real.txt'
 crop_size: 480
 image_size: 256
 data_augmentation: True
@@ -29,7 +29,7 @@ stu_kernel_size: 3
 use_stu: True
 deconv: False
 one_more_conv: True
-checkpoint: ~
+checkpoint: 9000
 
 # training
 batch_size: 32
