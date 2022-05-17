@@ -11,7 +11,7 @@ import numpy as np
 # from utils.im_util import get_alpha_channel
 import cv2
 from matplotlib import pyplot as plt
-
+from torchvision.utils import make_grid, save_image
 
 def make_dataset(root, train_file, test_file, mode, selected_attrs,att_neg=False,thres_edition=1.0):
     assert mode in ['train', 'val', 'test']
@@ -164,21 +164,14 @@ def list2idxs(l):
 
 
 def extract_highlights(image):
-    mask = ~image[:, :, 3:]
-    cv2.imwrite("mask.png", mask)
-    cv2.imwrite('img.png', image[:,:,:3])
-    img = image[:,:,:3]
-    res = cv2.bitwise_and(img,img,mask = mask)
-    cv2.imwrite('res.png', res)
-    #exit()
-    image_bw = np.sum(image[:, :, :3] * [0.299, 0.587,
-                      0.114], axis=2, keepdims=True)*mask
-    # print(image_bw.shape,image.shape)
-    # compute median color
-    image_ma = np.ma.masked_array(image_bw, 1-mask)
-    med = np.ma.median(image_ma)
-    image_high = np.clip(image_bw-med, 0, 255).astype(np.uint8)  # +med
-    return res
+    dset = __import__('datasets.transforms2', globals(), locals())
+    T = dset.transforms2
+    image = T.ToTensor()(T.Resize(256)(image))
+    mask = torch.where(image[3,:,:] <= 0.1, 1,0)
+    save_image(mask.float(),'mask.png')
+    back_ground = image[:3,:,:] * mask
+
+    return back_ground,mask
 
 
 class MaterialDataset(data.Dataset):
@@ -187,16 +180,6 @@ class MaterialDataset(data.Dataset):
 
         self.files = items['files']
         self.mat_attrs = items['mat_attrs']
-
-        # if using the disentangled sampler
-        # mats, self.idx2mats, self.mats2idxs = list2idxs(items['materials'])
-        # geoms, self.idx2geoms, self.geoms2idx = list2idxs(items['geometries'])
-        # illums, self.idx2illums, self.illums2idx = list2idxs(items['illuminations'])
-
-        # self.mats = np.array(mats)
-        # self.geoms = np.array(geoms)
-        # self.illums = np.array(illums)
-
         self.root = root
         self.mode = mode
         self.disentangled = disentangled
@@ -211,9 +194,6 @@ class MaterialDataset(data.Dataset):
             index = index_and_mode
 
         mat_attr = self.mat_attrs[index]
-        # mat=self.mats[index]
-        # geom=self.geoms[index]
-        # illum=self.illums[index]
 
         # OpenCV version
         # read image
@@ -246,65 +226,25 @@ class MaterialDataset(data.Dataset):
                         [0, 0, 1, 1, 2, 2, 6, 3])
 
         if (self.use_illum):
-            illum = cv2.imread(os.path.join(
-                self.root, "illum", self.files[index]), -1)
+            #illum = cv2.imread(os.path.join(self.root, "illum", self.files[index]), -1)
+            #if True:
+            illum,mask = extract_highlights(image)
 
-            
-            if True:
-                illum = extract_highlights(image)
-                #illum = np.concatenate([illum, illum, illum], axis=2)  # 3channels?
-                #print(illum.shape)
-                #exit()
 
-            else:
-
-                if illum.ndim == 3:  # RGB image
-                    # or cv2.COLOR_BGR2GRAY
-                    illum = cv2.cvtColor(illum, cv2.COLOR_BGR2RGB)
-
-                else:
-                    illum = illum[:, :, np.newaxis]  # image is already B&W
-                    illum = np.concatenate([illum, illum, illum], axis=2)
-
-        else:
-
-            illum = torch.Tensor()
-
-        # PIL version: faster but apply the alpha channel when resizing
-        # image = Image.open(os.path.join(self.root, "renderings", self.files[index]))
-        # try:
-        #     normals = Image.open(os.path.join(self.root, "normals", self.files[index][:-3]+"png"))
-        #     mask=get_alpha_channel(normals)
-        # except FileNotFoundError:
-        #     #put the original image in place of the normals + full mask
-        #     normals=image
-        #     mask = Image.new('L',normals.size,255)
-        #     normals.putalpha(mask)
-        # image.putalpha(mask)
-        #print(image.shape)
-        # apply the transforms
         if self.transform is not None:
-            if self.use_illum:
-                image, normals, illum, = self.transform(image, normals, illum)
-            else:
-                image, normals = self.transform(image, normals)
+            image, normals = self.transform(image, normals)
 
         # mask the normals
         normals = normals*normals[3:]
         # mask the input image if asked
         if self.mask_input_bg:
             image = image*image[3:]
-            #if self.use_illum:
-                #illum = illum*image[3:]
 
-        if self.disentangled:
-            return image, illum, torch.FloatTensor(mat_attr)
+        if self.mode == 'test':
+            filename = self.files[index].split('/')[1][:-4]
+            return image, torch.FloatTensor(mat_attr) , filename, illum, mask
         else:
-            if self.mode == 'test':
-                filename = self.files[index].split('/')[1][:-4]
-                return image, torch.FloatTensor(mat_attr) , filename, illum
-            else:
-                return image, torch.FloatTensor(mat_attr)
+            return image, torch.FloatTensor(mat_attr)
 
     def __len__(self):
         return len(self.files)
@@ -350,7 +290,7 @@ class MaterialDataLoader(object):
 
     def setup_transforms(self, use_illum):
         global T
-        if (use_illum):
+        if (False):
             dset = __import__('datasets.transforms3', globals(), locals())
             T = dset.transforms3
         else:
@@ -364,7 +304,9 @@ class MaterialDataLoader(object):
             T.Normalize(mean=(0.5, 0.5, 0.5, 0), std=(0.5, 0.5, 0.5, 1))
         ])
         # training transform : data augmentation
-        original_size = self.image_size *2
+        if self.image_size != 512:
+            print('new size')
+            original_size = 512
         if self.data_augmentation:
             
             train_trf = T.Compose([

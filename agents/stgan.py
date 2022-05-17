@@ -31,6 +31,8 @@ import cv2
 from matplotlib import cm
 cudnn.benchmark = True
 import time
+from pytorch_msssim import ssim, ms_ssim, SSIM, MS_SSIM
+import moviepy.video.io.ImageSequenceClip
 
 class STGANAgent(object):
     def __init__(self, config):
@@ -39,6 +41,16 @@ class STGANAgent(object):
         self.config = config
         self.logger = logging.getLogger("STGAN")
         self.logger.info("Creating STGAN architecture...")
+
+        if (self.config.mode == 'test' and self.config.plot_metrics) or self.config.video:
+            self.att_max = 1
+            self.config.att_min = 1
+            self.config.num_samples =  1
+            self.config.add_org = True
+            if self.config.video:
+                self.config.add_bg  = True
+            else:
+                self.config.add_bg  = False
 
         self.G = Generator(len(self.config.attrs), self.config.g_conv_dim, self.config.g_layers,
                            self.config.shortcut_layers, use_stu=self.config.use_stu, one_more_conv=self.config.one_more_conv,deconv= self.config.deconv,xavier_init=self.config.g_xavier_init)
@@ -93,7 +105,19 @@ class STGANAgent(object):
             LD_filename = 'LD_{}.pth.tar'.format(self.current_iteration)
             torch.save(LD_state, os.path.join(
                         self.config.checkpoint_dir, LD_filename))
-                        
+
+    def make_video(self):
+
+        fps=25
+        imgs = os.listdir(self.config.video_dir)
+        imgs.sort()
+        image_files = [os.path.join(self.config.video_dir,img)
+                       for img in imgs
+                       if img.endswith(".png")]
+                       
+        clip = moviepy.video.io.ImageSequenceClip.ImageSequenceClip(image_files, fps=fps)
+        clip.write_videofile(os.path.join(self.config.video_dir,'video.mp4'))
+                                
     def load_checkpoint(self):
         if self.config.checkpoint is None:
             self.G.to(self.device)
@@ -101,10 +125,8 @@ class STGANAgent(object):
             if self.config.use_ld:
                 self.LD.to(self.device)
             return
-        time.sleep(10)
 
         G_filename = 'G_{}.pth.tar'.format(self.config.checkpoint)
-        
         G_checkpoint = torch.load(os.path.join(self.config.checkpoint_dir, G_filename), map_location=self.device)
         G_to_load = {k.replace('module.', ''): v for k,
                      v in G_checkpoint['state_dict'].items()}
@@ -139,9 +161,11 @@ class STGANAgent(object):
         """Generate target domain labels for debugging and testing: linearly sample attribute. Contains a list for each attr"""
         all_lists = []
         for i in range(len(selected_attrs)):
-            c_trg_list = []  # [c_org]
-            alphas = linspace(att_min, att_max, num_samples)
-            print(alphas)
+            c_trg_list = []  
+            if self.config.video:
+                alphas = linspace(1, 1, 1)
+            else: 
+                alphas = linspace(att_min, att_max, num_samples)
             for alpha in alphas:
                 c_trg = c_org.clone()
                 c_trg[:, i] = torch.full_like(c_trg[:, i], alpha)
@@ -195,6 +219,8 @@ class STGANAgent(object):
 
         else:
             self.test()
+            if self.config.video:
+                self.make_video()
         # except KeyboardInterrupt:
             # self.logger.info('You have entered CTRL+C.. Wait to finalize')
         # except Exception as e:
@@ -303,7 +329,7 @@ class STGANAgent(object):
                 c_org = label_org.clone()
                 # data color histogram
                 if self.config.histogram:
-                    de_norm = denorm(x_real, device=self.device)
+                    de_norm = denorm(x_real, self.device,self.config.add_bg)
                     channels = de_norm.view(4,-1)
                     figure = channels[3] > 0
                     if self.config.histogram_color_type == 'rgb':
@@ -648,7 +674,7 @@ class STGANAgent(object):
                                 x_fake_list.append(x_fake)
 
                             x_concat = torch.cat(x_fake_list, dim=3)
-                            image = make_grid(denorm(x_concat, device=self.device), nrow=1)
+                            image = make_grid(denorm(x_concat, self.device,self.config.add_bg), nrow=1)
                             result_path = os.path.join(self.config.result_dir, 
                                                        'sample_{}_{}.png'.format(self.config.attrs[att_idx],
                                                        self.current_iteration))
@@ -680,27 +706,32 @@ class STGANAgent(object):
 
         self.G.eval()
         with torch.no_grad():
-            psnr_file = open(os.path.join(self.config.sample_dir, 'psnr.txt'),'w')
-            for i, (x_real, c_org, filename,illum) in enumerate(tqdm_loader):
+            pibot = torch.ones(1,len(self.config.attrs)) * self.config.default_att
+            c_trg_all = self.create_interpolated_attr(pibot, self.config.attrs, self.config.att_min, self.config.att_max, self.config.num_samples)
+            if self.config.mode == 'test' and self.config.plot_metrics:
+                psnr_file = open(os.path.join(self.config.metric_dir, 'psnr.txt'),'w')
+                ssim_file = open(os.path.join(self.config.metric_dir, 'ssim.txt'),'w')
+            for i, (x_real, c_org, filename,illum,mask) in enumerate(tqdm_loader):
                 
                 att_idx = 0
                 x_real = x_real.to(self.device)
                 ch_4 = x_real[:, 3:]
                 x_real = x_real[:, :3]
 
-                
-
-                c_trg_all = self.create_interpolated_attr(
-                    c_org, self.config.attrs, self.config.att_min, self.config.att_max, self.config.num_samples)
-
                 for c_trg_list in c_trg_all:
+                    if self.config.mode == 'test' and self.config.plot_metrics:
+                        c_trg_list = c_org
                     
                     if self.config.split:
                         x_fake_list = []
+                        
                         for n in range(0, x_real.shape[0]):
-
+                            
                             if self.config.add_org:
-                                x_fake_list.append([torch.cat([x_real[n], ch_4], dim=1)])
+                                if self.config.add_bg:
+                                    x_fake_list.append([x_real[n]])
+                                else:
+                                    x_fake_list.append([torch.cat([x_real[n], ch_4[n]], dim=0)])
                             else:
                                 x_fake_list.append([])
 
@@ -708,7 +739,6 @@ class STGANAgent(object):
                         x_fake_list = [torch.cat([x_real, ch_4], dim=1)]
 
                     for c_trg_sample in c_trg_list:
-                        
                         if self.config.att_diff:
                             attr_diff = c_trg_sample.to(
                                 self.device) - c_org.to(self.device)
@@ -720,37 +750,60 @@ class STGANAgent(object):
                         if self.config.split:
 
                             for n in range(0, x_real.shape[0]):                     
-                                
-                                fig = x_fake[n] * (ch_4[n] != 0)
-                                fig = torch.cat([fig, ch_4[n]], dim=0)
+
                                 if self.config.add_bg:
-                                    il = illum[n].to(self.device) 
-                                    il = il * (ch_4[n] == 0)
-                                    fig=fig+ torch.cat([il, ch_4[n] == 0  ], dim=0)
+                                    file_extension = 'png'
+                                    illum_n = illum[n].to(self.device)
+                                    inv_mask = torch.where(mask.to(self.device) == 1, 0,1)
+                                    figure = denorm(x_fake[n], self.device,self.config.add_bg)[0] *inv_mask
+                                    fig = illum_n + figure
+                                    
+                                else:
+                                    ile_extension = 'png'
+                                    fig = x_fake[n] * (ch_4[n] != 0)
+                                    fig = torch.cat([fig, ch_4[n] != 0], dim=0)
                                 x_fake_list[n].append(fig)
 
                         else:
 
                             x_fake = torch.cat([x_fake, ch_4], dim=1)
                             x_fake_list.append(x_fake)
-                    
+                        
                     if self.config.split:
                         
                         for n in range(0, x_real.shape[0]):
-                            #name = '{}_{}_{}_[{},{}]_{}.png'.format(self.config.checkpoint,n, i + 1,self.config.att_min,self.config.att_max,self.config.attrs[att_idx])
-                            name = '{}.png'.format(filename[0])
-                            real = x_fake_list[n][0]
-                            rec = x_fake_list[n][0]
-                            mse=self.img2mse(real,rec)
-                            psnr_file.write(name+' '+str(self.mse2psnr(mse).item())+'\n')
+                            if not self.config.video:
+                                name = '{}_{}_{}_[{},{}]_{}.{}'.format(self.config.checkpoint,n, i + 1,self.config.att_min,self.config.att_max,self.config.attrs[att_idx],file_extension)
+                            else:
+                                name = '{}-{}.png'.format(filename[0],self.config.attrs[att_idx])
+                            if self.config.mode == 'test' and self.config.plot_metrics:
+                                real = x_fake_list[n][0]
+                                rec = x_fake_list[n][1]
+                                mse=self.img2mse(real,rec)
+                                psnr_file.write(name+' '+str(self.mse2psnr(mse).item())+'\n')
+                                real = (real + 1) / 2 
+                                rec = (rec + 1) / 2 
+                                real =real.expand(1,4,256,256)
+                                rec =rec.expand(1,4,256,256)
+                                ssim_file.write(name+' '+str(ssim( real, rec, data_range=1, size_average=False).item() )+'\n')
+                                result_path = os.path.join(
+                                self.config.metric_dir, name)
+                            elif not self.config.video:
+                                result_path = os.path.join(
+                                self.config.sample_dir, name)
+                            else:
+                                result_path = os.path.join(self.config.video_dir, name)
+
+                            if self.config.add_org:
+                                x_fake_list[n][0] = denorm(x_fake_list[n][0], self.device,self.config.add_bg)[0]
+                                if self.config.add_bg:
+                                    x_fake_list[n][0] = x_fake_list[n][0]* inv_mask +  illum[n].to(self.device)  
 
                             x_concat = torch.cat(x_fake_list[n], dim=2)
-                            image = make_grid(
-                                denorm(x_concat, device=self.device), nrow=1)
-                            result_path = os.path.join(
-                                self.config.sample_dir, name)
+                            image = make_grid(x_concat, nrow=1)
+                            
                             save_image(image, result_path, nrow=1, padding=0)
-                        
+                            
                     else:
                         x_concat = torch.cat(x_fake_list, dim=3)
                         image = make_grid(
@@ -758,9 +811,11 @@ class STGANAgent(object):
                         result_path = os.path.join(
                             self.config.sample_dir, 'sample_{}_{}.png'.format(i + 1,str(c_trg_sample)))
                         save_image(image, result_path, nrow=1, padding=0)
+
                     att_idx += 1
-                
-        psnr_file.close()   
+        if self.config.mode == 'test' and self.config.plot_metrics:       
+            psnr_file.close()   
+            ssim_file.close()
 
     def latent(self):
         self.load_checkpoint()
