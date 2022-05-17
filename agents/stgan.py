@@ -101,7 +101,6 @@ class STGANAgent(object):
             if self.config.use_ld:
                 self.LD.to(self.device)
             return
-        time.sleep(10)
 
         G_filename = 'G_{}.pth.tar'.format(self.config.checkpoint)
         
@@ -700,7 +699,7 @@ class STGANAgent(object):
                         for n in range(0, x_real.shape[0]):
 
                             if self.config.add_org:
-                                x_fake_list.append([torch.cat([x_real[n], ch_4], dim=1)])
+                                x_fake_list.append([torch.cat([x_real[n], ch_4[n]], dim=0)])
                             else:
                                 x_fake_list.append([])
 
@@ -737,8 +736,8 @@ class STGANAgent(object):
                     if self.config.split:
                         
                         for n in range(0, x_real.shape[0]):
-                            #name = '{}_{}_{}_[{},{}]_{}.png'.format(self.config.checkpoint,n, i + 1,self.config.att_min,self.config.att_max,self.config.attrs[att_idx])
-                            name = '{}.png'.format(filename[0])
+                            name = '{}_{}_{}_[{},{}]_{}.png'.format(self.config.checkpoint,n, i + 1,self.config.att_min,self.config.att_max,self.config.attrs[att_idx])
+                            #name = '{}.png'.format(filename[0])
                             real = x_fake_list[n][0]
                             rec = x_fake_list[n][0]
                             mse=self.img2mse(real,rec)

@@ -61,24 +61,24 @@ def process_config(yaml_file):
     print(' *************************************** ')
 
     # create some important directories to be used for that experiments
-    config.summary_dir = os.path.join(
+    config.summary_dir = os.path.join(config.out_root,
         'experiments', config.exp_name, 'summaries/')
-    config.checkpoint_dir = os.path.join(
+    config.checkpoint_dir = os.path.join(config.out_root,
         'experiments', config.exp_name, 'checkpoints/')
-    config.sample_dir = os.path.join(
+    config.sample_dir = os.path.join(config.out_root,
         'experiments', config.exp_name, 'samples/')
-    config.log_dir = os.path.join('experiments', config.exp_name, 'logs/')
-    config.result_dir = os.path.join(
+    config.log_dir = os.path.join(config.out_root,'experiments', config.exp_name, 'logs/')
+    config.result_dir = os.path.join(config.out_root,
         'experiments', config.exp_name, 'results/')
     create_dirs([config.summary_dir, config.checkpoint_dir,
                 config.sample_dir, config.log_dir, config.result_dir])
     if config.histogram:
-        config.histogram_dir = os.path.join(
+        config.histogram_dir = os.path.join(config.out_root,
         'experiments', config.exp_name, 'results/histograms')
         if not os.path.exists(config.histogram_dir):
                 os.makedirs(config.histogram_dir)
     if config.mode=='train':
-        with open(os.path.join('experiments', config.exp_name,'summary.yaml'), 'w') as f:
+        with open(os.path.join(config.out_root,'experiments', config.exp_name,'summary.yaml'), 'w') as f:
             yaml.dump(file, f)
 
     # setup logging in the project

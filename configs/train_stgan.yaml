@@ -1,15 +1,16 @@
 # meta
-exp_name: 256_average_all
-mode: train
+exp_name: 256_average_glossy
+mode: test
 split: True
-cuda: True
+cuda: False
 ngpu: 1
-gpus: '0'
+gpus: '1'
 
 # data
 dataset: material
 data_root: 'data_45k'
-train_file: 'attributes_dataset_train_new_average.txt'
+out_root: '/media/raid/dsubias'
+train_file: 'attributes_dataset_train_new_median_illum.txt'
 test_file: 'attributes_dataset_synthetic.txt'
 crop_size: 480
 image_size: 256
@@ -18,7 +19,8 @@ mask_input_bg: True
 histogram: True
 histogram_color_type: 'hsv'
 add_bg: False
-add_org: False
+add_org: True
+plot_metrics: False
 
 # model
 g_conv_dim: 32
@@ -31,10 +33,10 @@ stu_kernel_size: 3
 use_stu: True
 deconv: False
 one_more_conv: True
-checkpoint: 42000
+checkpoint: 30750
 
 # training
-batch_size: 16
+batch_size: 32
 beta1: 0.5
 beta2: 0.999
 g_lr: 0.0002
@@ -64,7 +66,7 @@ att_min: 0
 num_samples: 9
 att_neg: False
 att_diff: False
-attrs: [plastic,	rubber,	metallic,	glossy,	bright,	rough,	refstrng,	refsharp	]
+attrs: [ glossy ]
 uniform: True
 
 # iterations
@@ -72,6 +74,6 @@ max_epochs: 40
 lr_decay_iters: 100000000
 
 # steps:
-summary_step: 200
-sample_step: 1500
-checkpoint_step: 1500
+summary_step: 100
+sample_step: 750
+checkpoint_step: 750
