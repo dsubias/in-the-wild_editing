@@ -70,16 +70,28 @@ def process_config(yaml_file):
     config.log_dir = os.path.join(config.out_root,'experiments', config.exp_name, 'logs/')
     config.result_dir = os.path.join(config.out_root,
         'experiments', config.exp_name, 'results/')
-    create_dirs([config.summary_dir, config.checkpoint_dir,
-                config.sample_dir, config.log_dir, config.result_dir])
+
+    dir_list = [config.summary_dir, config.checkpoint_dir,
+                config.sample_dir, config.log_dir, config.result_dir]
+    if config.video:
+        config.video_dir = os.path.join(config.out_root,'experiments', config.exp_name, 'video/')
+        dir_list.append(config.video_dir)
+
+    create_dirs(dir_list)
     if config.histogram:
         config.histogram_dir = os.path.join(config.out_root,
         'experiments', config.exp_name, 'results/histograms')
         if not os.path.exists(config.histogram_dir):
                 os.makedirs(config.histogram_dir)
+    if config.mode == 'test' and config.plot_metrics:
+        config.metric_dir = os.path.join(
+        'experiments', config.exp_name, 'results/metrics')
+        if not os.path.exists(config.metric_dir):
+                os.makedirs(config.metric_dir)
     if config.mode=='train':
         with open(os.path.join(config.out_root,'experiments', config.exp_name,'summary.yaml'), 'w') as f:
             yaml.dump(file, f)
+    
 
     # setup logging in the project
     setup_logging(config.log_dir)

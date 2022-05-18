@@ -26,10 +26,17 @@ class Compose(object):
     def __init__(self, transforms):
         self.transforms = transforms
 
-    def __call__(self, image, normals):
+    def __call__(self, image, normals=[]):
         for t in self.transforms:
-            image, normals = t(image, normals)
-        return image, normals
+            if normals != []:
+                image, normals = t(image, normals)
+            else:
+                image = t(image)
+        if normals != []:
+            return image, normals
+        else:
+            return image
+        
 
 
 
@@ -50,18 +57,25 @@ class Resize(object):
         self.size = (size,size) #TODO according to what is size
         self.interpolation = interpolation
 
-    def __call__(self, image, normals): #TODO warning for mask -> nearest interpolation?
-        image = F.resize(image, self.size, self.interpolation)
-        normals = F.resize(normals, self.size, self.interpolation)
-        return image, normals
+    def __call__(self, image, normals=[]): #TODO warning for mask -> nearest interpolation?
+        if normals !=[]:
+            image = F.resize(image, self.size, self.interpolation)
+            normals = F.resize(normals, self.size, self.interpolation)
+            return image, normals
+        else:
+            image = F.resize(image, self.size, self.interpolation)
+            return image
 
 
 class ToTensor(object):
-    def __call__(self, image, normals):
-        image = F.to_tensor(image)
-        normals = F.to_tensor(normals)
-        #normals = torch.as_tensor(np.array(normals), dtype=torch.int64) #for masks
-        return image, normals
+    def __call__(self, image, normals=[]):
+        if normals != []:
+            image = F.to_tensor(image)
+            normals = F.to_tensor(normals)
+            return image, normals
+        else:
+            image = F.to_tensor(image)
+            return image
 
 
 class Normalize(object):
@@ -69,10 +83,14 @@ class Normalize(object):
         self.mean = mean
         self.std = std
 
-    def __call__(self, image, normals):
-        image = F.normalize(image, mean=self.mean, std=self.std)
-        normals = F.normalize(normals, mean=self.mean, std=self.std)
-        return image, normals
+    def __call__(self, image, normals=None):
+        if normals != None:
+            image = F.normalize(image, mean=self.mean, std=self.std)
+            normals = F.normalize(normals, mean=self.mean, std=self.std)
+            return image, normals
+        else: 
+            image = F.normalize(image, mean=self.mean, std=self.std)
+            return image
 
 
 class RandomHorizontalFlip(object):

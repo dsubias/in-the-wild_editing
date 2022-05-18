@@ -46,9 +46,12 @@ def _imscatter(x, y, image, color=None, ax=None, zoom=1.):
     return artists
 
 
-def denorm(x, device):
+def denorm(x, device,add_bg):
     # get from [-1,1] to [0,1]
-    norm = Normalize(mean=(-1, -1, -1, 0), std=(2, 2, 2, 1), device=device)
+    if add_bg:
+        norm = Normalize(mean=(-1, -1, -1), std=(2, 2, 2), device=device)
+    else:
+        norm = Normalize(mean=(-1, -1, -1, 0), std=(2, 2, 2, 1), device=device)
     return norm(x)
 
 

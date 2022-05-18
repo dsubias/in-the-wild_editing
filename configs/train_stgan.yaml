@@ -1,8 +1,8 @@
 # meta
-exp_name: 256_average_glossy
+exp_name: 256_mean_illum_metallic_org
 mode: test
 split: True
-cuda: False
+cuda: True
 ngpu: 1
 gpus: '1'
 
@@ -11,15 +11,16 @@ dataset: material
 data_root: 'data_45k'
 out_root: '/media/raid/dsubias'
 train_file: 'attributes_dataset_train_new_median_illum.txt'
-test_file: 'attributes_dataset_synthetic.txt'
+test_file: 'attributes_dataset_real.txt'
 crop_size: 480
 image_size: 256
 data_augmentation: True
 mask_input_bg: True
 histogram: True
 histogram_color_type: 'hsv'
-add_bg: False
+add_bg: True
 add_org: True
+video: False
 plot_metrics: False
 
 # model
@@ -33,7 +34,7 @@ stu_kernel_size: 3
 use_stu: True
 deconv: False
 one_more_conv: True
-checkpoint: 30750
+checkpoint: 26250
 
 # training
 batch_size: 32
@@ -66,8 +67,9 @@ att_min: 0
 num_samples: 9
 att_neg: False
 att_diff: False
-attrs: [ glossy ]
+attrs: [ metallic ]
 uniform: True
+default_att: 0.5
 
 # iterations
 max_epochs: 40
