@@ -752,16 +752,21 @@ class STGANAgent(object):
                             for n in range(0, x_real.shape[0]):                     
 
                                 if self.config.add_bg:
-                                    file_extension = 'png'
+                                    
                                     illum_n = illum[n].to(self.device)
                                     inv_mask = torch.where(mask.to(self.device) == 1, 0,1)
                                     figure = denorm(x_fake[n], self.device,self.config.add_bg)[0] *inv_mask
                                     fig = illum_n + figure
                                     
                                 else:
-                                    ile_extension = 'png'
-                                    fig = x_fake[n] * (ch_4[n] != 0)
-                                    fig = torch.cat([fig, ch_4[n] != 0], dim=0)
+                                    if not self.config.plot_metrics:
+                                        fig = x_fake[n] * (ch_4[n] != 0)
+                                        fig = torch.cat([fig, ch_4[n] != 0], dim=0)
+                                        fig = denorm(fig, self.device,self.config.add_bg)[0]
+                                    else:
+                                        fig = torch.cat([x_fake[n] , ch_4[n]], dim=0)
+                                    
+                                    
                                 x_fake_list[n].append(fig)
 
                         else:
@@ -773,21 +778,25 @@ class STGANAgent(object):
                         
                         for n in range(0, x_real.shape[0]):
                             if not self.config.video:
-                                name = '{}_{}_{}_[{},{}]_{}.{}'.format(self.config.checkpoint,n, i + 1,self.config.att_min,self.config.att_max,self.config.attrs[att_idx],file_extension)
+                                name = '{}_{}_{}_[{},{}]_{}.png'.format(self.config.checkpoint,n, i + 1,self.config.att_min,self.config.att_max,self.config.attrs[att_idx])
                             else:
                                 name = '{}-{}.png'.format(filename[0],self.config.attrs[att_idx])
                             if self.config.mode == 'test' and self.config.plot_metrics:
+                                
                                 real = x_fake_list[n][0]
                                 rec = x_fake_list[n][1]
                                 mse=self.img2mse(real,rec)
-                                psnr_file.write(name+' '+str(self.mse2psnr(mse).item())+'\n')
+                                psnr_file.write(#name+' '+
+                                                str(self.mse2psnr(mse).item())+'\n')
                                 real = (real + 1) / 2 
                                 rec = (rec + 1) / 2 
                                 real =real.expand(1,4,256,256)
                                 rec =rec.expand(1,4,256,256)
-                                ssim_file.write(name+' '+str(ssim( real, rec, data_range=1, size_average=False).item() )+'\n')
+                                ssim_file.write(#name+' '+
+                                                str(ssim( real, rec, data_range=1, size_average=False).item() )+'\n')
                                 result_path = os.path.join(
                                 self.config.metric_dir, name)
+                                x_fake_list[n][1] = denorm(x_fake_list[n][1], self.device,self.config.add_bg)[0]
                             elif not self.config.video:
                                 result_path = os.path.join(
                                 self.config.sample_dir, name)
