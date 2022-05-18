@@ -11,7 +11,7 @@ dataset: material
 data_root: 'data_45k'
 out_root: '/media/raid/dsubias'
 train_file: 'attributes_dataset_train_new_median_illum.txt'
-test_file: 'attributes_dataset_real.txt'
+test_file: 'attributes_dataset_test_full_new_illum.txt'
 crop_size: 480
 image_size: 256
 data_augmentation: True
@@ -21,7 +21,7 @@ histogram_color_type: 'hsv'
 add_bg: True
 add_org: True
 video: False
-plot_metrics: False
+plot_metrics: True
 
 # model
 g_conv_dim: 32
@@ -63,8 +63,8 @@ lambda_5: 1 # adversarial generator
 att_activation: 'sigmoid' # 'tanh', 'sigmoid' or ''
 att_loss: 'l1' # 'l1', 'binary_cross_entropy' or 'cross_entropy'
 att_max: 1
-att_min: 0
-num_samples: 9
+att_min: 1
+num_samples: 1
 att_neg: False
 att_diff: False
 attrs: [ metallic ]
