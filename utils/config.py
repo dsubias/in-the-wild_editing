@@ -66,7 +66,7 @@ def process_config(yaml_file):
     config.checkpoint_dir = os.path.join(config.out_root,
         'experiments', config.exp_name, 'checkpoints/')
     config.sample_dir = os.path.join(config.out_root,
-        'experiments', config.exp_name, 'samples/')
+        'experiments', config.exp_name, config.output_name)
     config.log_dir = os.path.join(config.out_root,'experiments', config.exp_name, 'logs/')
     config.result_dir = os.path.join(config.out_root,
         'experiments', config.exp_name, 'results/')
@@ -74,7 +74,7 @@ def process_config(yaml_file):
     dir_list = [config.summary_dir, config.checkpoint_dir,
                 config.sample_dir, config.log_dir, config.result_dir]
     if config.video:
-        config.video_dir = os.path.join(config.out_root,'experiments', config.exp_name, 'video/')
+        config.video_dir = os.path.join(config.out_root,'experiments', config.exp_name, config.output_name)
         dir_list.append(config.video_dir)
 
     create_dirs(dir_list)

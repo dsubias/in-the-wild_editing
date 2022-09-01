@@ -33,6 +33,7 @@ cudnn.benchmark = True
 import time
 from pytorch_msssim import ssim, ms_ssim, SSIM, MS_SSIM
 import moviepy.video.io.ImageSequenceClip
+from torchstat import stat
 
 class STGANAgent(object):
     def __init__(self, config):
@@ -57,6 +58,11 @@ class STGANAgent(object):
         self.D = Discriminator(self.config.image_size, len(
             self.config.attrs), self.config.d_conv_dim, self.config.d_fc_dim, self.config.d_layers,self.config.att_activation,xavier_init=self.config.d_xavier_init)
 
+        G_total_params = sum(p.numel() for p in self.G.parameters() if p.requires_grad)
+        D_total_params = sum(p.numel() for p in self.D.parameters() if p.requires_grad)
+        print(G_total_params)
+        print(D_total_params)
+        print(G_total_params+D_total_params)
         if  self.config.use_ld:
             self.LD = Latent_Discriminator(num_attrs=len(self.config.attrs),image_size=self.config.image_size,xavier_init=self.config.ld_xavier_init,att_activation=self.config.att_activation)
 
@@ -82,10 +88,12 @@ class STGANAgent(object):
         G_state = {
             'state_dict': self.G.state_dict(),
             'optimizer': self.optimizer_G.state_dict(),
+            'lr_scheduler': self.lr_scheduler_G.state_dict()
         }
         D_state = {
             'state_dict': self.D.state_dict(),
             'optimizer': self.optimizer_D.state_dict(),
+            'lr_scheduler': self.lr_scheduler_D.state_dict()
         }
             
         G_filename = 'G_{}.pth.tar'.format(self.current_iteration)
@@ -101,6 +109,7 @@ class STGANAgent(object):
             LD_state = {
                 'state_dict': self.LD.state_dict(),
                 'optimizer': self.optimizer_LD.state_dict(),
+                'lr_scheduler': self.lr_scheduler_LD.state_dict()
             }
             LD_filename = 'LD_{}.pth.tar'.format(self.current_iteration)
             torch.save(LD_state, os.path.join(
@@ -145,6 +154,8 @@ class STGANAgent(object):
             self.current_iteration = self.config.checkpoint
             self.optimizer_G.load_state_dict(G_checkpoint['optimizer'])
             self.optimizer_D.load_state_dict(D_checkpoint['optimizer'])
+            self.lr_scheduler_G.load_state_dict(G_checkpoint['lr_scheduler'])
+            self.lr_scheduler_D.load_state_dict(D_checkpoint['lr_scheduler'])
 
             if  self.config.use_ld:
                 LD_filename = 'LD_{}.pth.tar'.format(self.config.checkpoint)
@@ -155,6 +166,7 @@ class STGANAgent(object):
                 self.LD.load_state_dict(LD_to_load)
                 self.LD.to(self.device)
                 self.optimizer_LD.load_state_dict(LD_checkpoint['optimizer'])
+                self.lr_scheduler_LD.load_state_dict(LD_checkpoint['lr_scheduler'])
         
 
     def create_interpolated_attr(self, c_org, selected_attrs=None,att_min=-1, att_max=1, num_samples=9):
@@ -163,7 +175,7 @@ class STGANAgent(object):
         for i in range(len(selected_attrs)):
             c_trg_list = []  
             if self.config.video:
-                alphas = linspace(1, 1, 1)
+                alphas = linspace(self.config.att_max, self.config.att_max, 1)
             else: 
                 alphas = linspace(att_min, att_max, num_samples)
             for alpha in alphas:
@@ -270,10 +282,6 @@ class STGANAgent(object):
         ch_4_sample = ch_4_sample.to(self.device)
         all_sample_list = self.create_interpolated_attr(
             c_org_sample, self.config.attrs, self.config.att_min,self.config.att_max, self.config.num_samples)
-
-        self.g_lr = self.lr_scheduler_G.get_lr()[0]
-        self.d_lr = self.lr_scheduler_D.get_lr()[0]
-        self.ld_lr = self.lr_scheduler_D.get_lr()[0]
 
         if self.config.histogram:
             nb_bins = 256
@@ -580,6 +588,11 @@ class STGANAgent(object):
                 scalars['G/loss_rec'] = g_loss_rec.item()
                 scalars['G/psnr'] = psnr
 
+                scalars['G/lr'] = self.lr_scheduler_G.get_last_lr()
+                scalars['D/lr'] = self.lr_scheduler_D.get_last_lr()
+                if  self.config.use_ld:
+                    scalars['LD/lr'] = self.lr_scheduler_LD.get_last_lr()
+
                 self.current_iteration += 1
 
                 # =================================================================================== #
@@ -708,15 +721,19 @@ class STGANAgent(object):
         with torch.no_grad():
             pibot = torch.ones(1,len(self.config.attrs)) * self.config.default_att
             c_trg_all = self.create_interpolated_attr(pibot, self.config.attrs, self.config.att_min, self.config.att_max, self.config.num_samples)
+            
             if self.config.mode == 'test' and self.config.plot_metrics:
                 psnr_file = open(os.path.join(self.config.metric_dir, 'psnr.txt'),'w')
                 ssim_file = open(os.path.join(self.config.metric_dir, 'ssim.txt'),'w')
-            for i, (x_real, c_org, filename,illum,mask) in enumerate(tqdm_loader):
-                
+
+            for i, (x_real, c_org, filename,illum,mask,rgb) in enumerate(tqdm_loader):
+
+                rgb = rgb.to(self.device) 
                 att_idx = 0
                 x_real = x_real.to(self.device)
                 ch_4 = x_real[:, 3:]
                 x_real = x_real[:, :3]
+                
 
                 for c_trg_list in c_trg_all:
                     if self.config.mode == 'test' and self.config.plot_metrics:
@@ -724,13 +741,20 @@ class STGANAgent(object):
                     
                     if self.config.split:
                         x_fake_list = []
-                        
+
+                        # Adding original images or not 
                         for n in range(0, x_real.shape[0]):
                             
                             if self.config.add_org:
+
                                 if self.config.add_bg:
-                                    x_fake_list.append([x_real[n]])
+
+                                    x_fake_list.append([torch.cat([rgb[n], 
+                                                        torch.ones((1,rgb[n].shape[1],
+                                                        rgb[n].shape[2]),
+                                                        device=self.device)], dim=0)])
                                 else:
+                                    
                                     x_fake_list.append([torch.cat([x_real[n], ch_4[n]], dim=0)])
                             else:
                                 x_fake_list.append([])
@@ -739,34 +763,49 @@ class STGANAgent(object):
                         x_fake_list = [torch.cat([x_real, ch_4], dim=1)]
 
                     for c_trg_sample in c_trg_list:
+
+                        # Gereating edited images
                         if self.config.att_diff:
-                            attr_diff = c_trg_sample.to(
-                                self.device) - c_org.to(self.device)
+
+                            attr_diff = c_trg_sample.to(self.device) - c_org.to(self.device)
                             x_fake = self.G(x_real, attr_diff.to(self.device))
+
                         else:
-                            x_fake = self.G(
-                                x_real, c_trg_sample.to(self.device))
+
+                            x_fake = self.G(x_real, c_trg_sample.to(self.device))
 
                         if self.config.split:
 
                             for n in range(0, x_real.shape[0]):                     
-
+                                
                                 if self.config.add_bg:
-                                    
+
                                     illum_n = illum[n].to(self.device)
+                                    figure = denorm(x_fake[n], self.device, self.config.add_bg)[0]
                                     inv_mask = torch.where(mask.to(self.device) == 1, 0,1)
-                                    figure = denorm(x_fake[n], self.device,self.config.add_bg)[0] *inv_mask
-                                    fig = illum_n + figure
-                                    
+                                    figure= figure * inv_mask
+                                    object_ = torch.cat([rgb[0].to(self.device) ,ch_4[n]], dim=0) 
+                                    edited = torch.cat([figure ,ch_4[n]], dim=0) 
+                                    aux_1 = torch.where(ch_4[n] <= 0.3,  torch.tensor(1, dtype=ch_4[n].dtype).to(self.device) ,torch.tensor(0, dtype=ch_4[n].dtype).to(self.device))
+                                    aux_inv = torch.where(aux_1 == 0.,  torch.tensor(1, dtype=ch_4[n].dtype).to(self.device) ,torch.tensor(0, dtype=ch_4[n].dtype).to(self.device))
+                                    bg = rgb[0] * aux_1
+                                    figure = figure * aux_inv
+                                    fig = figure + bg
+                                    fig = torch.cat([fig, torch.ones(1,rgb[n].shape[1],
+                                                        rgb[n].shape[2],device=self.device)], dim=0)
                                 else:
-                                    if not self.config.plot_metrics:
+                                    
+                                    if self.config.video:
+                                        
                                         fig = x_fake[n] * (ch_4[n] != 0)
                                         fig = torch.cat([fig, ch_4[n] != 0], dim=0)
                                         fig = denorm(fig, self.device,self.config.add_bg)[0]
                                     else:
+                                        
                                         fig = torch.cat([x_fake[n] , ch_4[n]], dim=0)
-                                    
-                                    
+                                        if not self.config.plot_metrics:
+                                            fig = denorm(fig, self.device,self.config.add_bg)[0]
+                                
                                 x_fake_list[n].append(fig)
 
                         else:
@@ -775,12 +814,14 @@ class STGANAgent(object):
                             x_fake_list.append(x_fake)
                         
                     if self.config.split:
-                        
+
                         for n in range(0, x_real.shape[0]):
                             if not self.config.video:
                                 name = '{}_{}_{}_[{},{}]_{}.png'.format(self.config.checkpoint,n, i + 1,self.config.att_min,self.config.att_max,self.config.attrs[att_idx])
                             else:
                                 name = '{}-{}.png'.format(filename[0],self.config.attrs[att_idx])
+
+                                
                             if self.config.mode == 'test' and self.config.plot_metrics:
                                 
                                 real = x_fake_list[n][0]
@@ -797,20 +838,17 @@ class STGANAgent(object):
                                 result_path = os.path.join(
                                 self.config.metric_dir, name)
                                 x_fake_list[n][1] = denorm(x_fake_list[n][1], self.device,self.config.add_bg)[0]
+                                
                             elif not self.config.video:
-                                result_path = os.path.join(
-                                self.config.sample_dir, name)
-                            else:
-                                result_path = os.path.join(self.config.video_dir, name)
 
-                            if self.config.add_org:
-                                x_fake_list[n][0] = denorm(x_fake_list[n][0], self.device,self.config.add_bg)[0]
-                                if self.config.add_bg:
-                                    x_fake_list[n][0] = x_fake_list[n][0]* inv_mask +  illum[n].to(self.device)  
+                                result_path = os.path.join(self.config.sample_dir, name)
+
+                            else:
+                                
+                                result_path = os.path.join(self.config.video_dir, name)
 
                             x_concat = torch.cat(x_fake_list[n], dim=2)
                             image = make_grid(x_concat, nrow=1)
-                            
                             save_image(image, result_path, nrow=1, padding=0)
                             
                     else:

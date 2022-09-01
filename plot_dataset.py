@@ -11,7 +11,7 @@ from torchvision.utils import make_grid, save_image
 from utils.im_util import denorm
 import numpy as np
 from tqdm import tqdm, trange
-
+from torchvision.utils import make_grid, save_image
 DIR = 'data_iters'
 
 arg_parser = argparse.ArgumentParser()
@@ -43,11 +43,11 @@ if not os.path.exists(DIR):
 b = 0
 for batch in trange(0, 3, desc='Epoch {}'.format(0),leave=(0==config.max_epochs-1)):
 
-    x_real, label_org = next(data_iter)
+    x_real, label_org, rgb = next(data_iter)
 
 
-    de_norm = denorm(x_real, device='cpu')
-    de_norm = de_norm.cpu().numpy()
+    de_norm = denorm(x_real, device='cpu',add_bg=False)
+    de_norm = de_norm.cpu()
 
     for i in range(de_norm.shape[0]):
         
@@ -56,5 +56,7 @@ for batch in trange(0, 3, desc='Epoch {}'.format(0),leave=(0==config.max_epochs-
         plt.title(str(label_org[i].item()))
         plt.savefig(DIR + '/' + str(b) + '-' + str(i)+".png")
         plt.close(fig)
-
+        save_image(rgb,"org.png")
+        save_image(de_norm,"augmented.png")
+        exit()
     b+=1

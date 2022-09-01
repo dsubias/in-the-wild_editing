@@ -163,15 +163,18 @@ def list2idxs(l):
 # extract the highlights from an image of a glossy mat
 
 
-def extract_highlights(image):
+def extract_highlights(image,image_rgb):
     dset = __import__('datasets.transforms2', globals(), locals())
     T = dset.transforms2
     image = T.ToTensor()(T.Resize(256)(image))
+    image_rgb = T.ToTensor()(T.Resize(256)(image_rgb))
     mask = torch.where(image[3,:,:] <= 0.1, 1,0)
     save_image(mask.float(),'mask.png')
+    save_image(image.float(),'img.png')
+    save_image(image_rgb.float(),'img_rgb.png')
     back_ground = image[:3,:,:] * mask
 
-    return back_ground,mask
+    return back_ground,mask, image_rgb
 
 
 class MaterialDataset(data.Dataset):
@@ -221,6 +224,7 @@ class MaterialDataset(data.Dataset):
             element = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
             normals[:, :, 3] = cv2.dilate(normals[:, :, 3], element)
         # add mask to image
+        
         image = np.ndarray(normals.shape, dtype=np.uint8)
         cv2.mixChannels([image_rgb, normals], [image],
                         [0, 0, 1, 1, 2, 2, 6, 3])
@@ -228,7 +232,7 @@ class MaterialDataset(data.Dataset):
         if (self.use_illum):
             #illum = cv2.imread(os.path.join(self.root, "illum", self.files[index]), -1)
             #if True:
-            illum,mask = extract_highlights(image)
+            illum , mask, rgb = extract_highlights(image,image_rgb)
 
 
         if self.transform is not None:
@@ -242,9 +246,9 @@ class MaterialDataset(data.Dataset):
 
         if self.mode == 'test':
             filename = self.files[index].split('/')[1][:-4]
-            return image, torch.FloatTensor(mat_attr) , filename, illum, mask
+            return image, torch.FloatTensor(mat_attr) , filename, illum, mask, rgb
         else:
-            return image, torch.FloatTensor(mat_attr)
+            return image, torch.FloatTensor(mat_attr), rgb
 
     def __len__(self):
         return len(self.files)
@@ -304,9 +308,8 @@ class MaterialDataLoader(object):
             T.Normalize(mean=(0.5, 0.5, 0.5, 0), std=(0.5, 0.5, 0.5, 1))
         ])
         # training transform : data augmentation
-        if self.image_size != 512:
-            print('new size')
-            original_size = 512
+        #if self.image_size != 512:
+        original_size = 512
         if self.data_augmentation:
             
             train_trf = T.Compose([
