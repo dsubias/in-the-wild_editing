@@ -1,10 +1,9 @@
 import numpy as np
 from PIL import Image
 import random
-
+import mxnet as mx 
 import torch
-#from torchvision import transforms as T
-#from torchvision.transforms import functional as F
+
 from opencv_transforms import functional as F
 from opencv_transforms import transforms as T
 import albumentations as A
@@ -12,15 +11,6 @@ from albumentations import functional as FA
 from utils.im_util import denorm
 from torchvision.utils import make_grid, save_image
 
-
-# def pad_if_smaller(img, size, fill=0):
-#     min_size = min(img.size)
-#     if min_size < size:
-#         ow, oh = img.size
-#         padh = size - oh if oh < size else 0
-#         padw = size - ow if ow < size else 0
-#         img = F.pad(img, (0, 0, padw, padh), fill=fill)
-#     return img
 
 class Compose(object):
     def __init__(self, transforms):
@@ -37,9 +27,6 @@ class Compose(object):
         else:
             return image
         
-
-
-
 class CenterCrop(object):
     def __init__(self, size):
         self.size = size
@@ -48,9 +35,6 @@ class CenterCrop(object):
         image = F.center_crop(image, self.size)
         normals = F.center_crop(normals, self.size)
         return image, normals
-
-
-
 
 class Resize(object): 
     def __init__(self, size, interpolation=Image.BILINEAR):
@@ -66,7 +50,6 @@ class Resize(object):
             image = F.resize(image, self.size, self.interpolation)
             return image
 
-
 class ToTensor(object):
     def __call__(self, image, normals=[]):
         if normals != []:
@@ -76,7 +59,6 @@ class ToTensor(object):
         else:
             image = F.to_tensor(image)
             return image
-
 
 class Normalize(object):
     def __init__(self, mean, std):
@@ -92,7 +74,6 @@ class Normalize(object):
             image = F.normalize(image, mean=self.mean, std=self.std)
             return image
 
-
 class RandomHorizontalFlip(object):
     def __init__(self, flip_prob):
         self.flip_prob = flip_prob
@@ -105,7 +86,6 @@ class RandomHorizontalFlip(object):
             normals_red_channel = 255 - normals_red_channel
             normals[:,:,0] = normals_red_channel
         return image, normals
-
 
 class RandomVerticalFlip(object):
     def __init__(self, flip_prob):
@@ -169,6 +149,22 @@ class Albumentations(object):
             hue_shift=random.uniform(-self.hue_limit, self.hue_limit)
             sat_shift=random.uniform(-self.sat_limit, self.sat_limit)
             image[:,:,:3] = FA.shift_hsv(image[:,:,:3], hue_shift=hue_shift,sat_shift=sat_shift, val_shift=0)
+
+        return image, normals
+
+class Albumentations2(object):
+    def __init__(self, hue_limit, sat_limit, flip_prob):
+        self.hue_limit = hue_limit
+        self.sat_limit = sat_limit
+        self.flip_prob=flip_prob
+
+    def __call__(self, image, normals):
+        if random.random() < self.flip_prob:
+            
+            mx_ex_int_array = mx.nd.array(image[:,:,:3] / 255.)
+            aug = mx.ndarray.image.random_saturation(mx_ex_int_array[:,:,:3],0.,1.)
+            aug = mx.ndarray.image.random_hue(aug,0.,1.)
+            image[:,:,:3] = (aug.asnumpy() * 255).astype(np.uint8)
         return image, normals
 
 
@@ -184,8 +180,6 @@ class RandomCrop(object):
         normals = F.crop(normals, *crop_params)
         return image, normals
 
-
-
 class RandomResize(object):
     def __init__(self, low, high, interpolation=Image.BILINEAR):
         self.low = low
@@ -197,7 +191,6 @@ class RandomResize(object):
         image = F.resize(image, (size,size), self.interpolation)
         normals = F.resize(normals, (size,size), self.interpolation)
         return image, normals
-
 
 class RandomRotation(object):
     def __init__(self, degrees, resample=False, expand=False, center=None, fill=None):

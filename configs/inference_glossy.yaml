@@ -1,0 +1,79 @@
+# meta
+exp_name: 256_median_new_glossy_final
+mode: edit_video # train, edit_images, edit_video or plot_metrics
+cuda: False
+ngpu: 1
+gpus: '1'
+
+# --- Editing ---
+output_name: video_1
+checkpoint: 54000 #56250
+add_bg: True
+test_file: video_att.txt
+
+# Image options
+
+att_max: 1
+att_min: 0
+num_samples: 9
+
+# Video options
+att_value_frame : 1
+
+# data
+dataset: material
+data_root: /media/raid/dsubias/data_45k
+out_root: /media/raid/dsubias
+train_file: attributes_dataset_train_new_median_illum.txt
+val_file: attributes_dataset_synthetic.txt
+crop_size: 480
+image_size: 256
+data_augmentation: True
+mask_input_bg: True
+histogram: True
+histogram_color_type: hsv
+
+# model
+g_conv_dim: 32
+d_conv_dim: 32
+d_fc_dim: 256
+g_layers: 5
+d_layers: 5
+shortcut_layers: 4
+stu_kernel_size: 3
+use_stu: True
+deconv: False
+one_more_conv: True
+
+# training
+batch_size: 32
+beta1: 0.5
+beta2: 0.999
+g_lr: 0.0002
+d_lr: 0.0002
+n_critic: 7
+ld_n_critic: 10
+thres_int: 1.0
+use_d: True
+
+# tradeoff parameters
+lambda_gp: 10
+lambda_1: 50 # att discriminator (original value = 1)
+lambda_2: 100 # att generator (original value = 10)
+lambda_3: 1000 # reconstruction generator (original value = 100)
+
+# attributes
+att_activation: sigmoid # tanh, sigmoid or 
+att_loss: l1 # l1, binary_cross_entropy or cross_entropy
+attrs: [ glossy ]
+uniform: True
+default_att: 0.5
+
+# iterations
+max_epochs: 50
+lr_decay_iters: 55000000
+
+# steps:
+summary_step: 100
+sample_step: 750
+checkpoint_step: 750

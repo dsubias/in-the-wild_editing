@@ -56,7 +56,7 @@ class Normalize:
 
         if not self.inplace:
             tensor = tensor.clone()
-
+        
         return (tensor - self.mean) / self.std
 
 

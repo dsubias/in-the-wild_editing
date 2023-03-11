@@ -1,27 +1,26 @@
 # meta
-exp_name: 256_mean_illum_metallic_org
+exp_name: 256_median_new_metallic_final
+output_name: textures_bg
 mode: test
-split: True
-cuda: True
+cuda: False
 ngpu: 1
 gpus: '1'
 
 # data
 dataset: material
-data_root: 'data_45k'
-out_root: '/media/raid/dsubias'
-train_file: 'attributes_dataset_train_new_median_illum.txt'
-test_file: 'attributes_dataset_test_full_new_illum.txt'
+data_root: /media/raid/dsubias/data_45k
+out_root: /media/raid/dsubias
+train_file: attributes_dataset_train_new_median_illum.txt
+val_file: attributes_dataset_synthetic.txt
+test_file: textures.txt
 crop_size: 480
 image_size: 256
 data_augmentation: True
 mask_input_bg: True
 histogram: True
-histogram_color_type: 'hsv'
-add_bg: True
-add_org: True
+histogram_color_type: hsv
+add_bg: False
 video: False
-plot_metrics: True
 
 # model
 g_conv_dim: 32
@@ -34,7 +33,7 @@ stu_kernel_size: 3
 use_stu: True
 deconv: False
 one_more_conv: True
-checkpoint: 26250
+checkpoint: 55500 #56250
 
 # training
 batch_size: 32
@@ -49,31 +48,27 @@ thres_edition: 1.0
 g_xavier_init: False
 d_xavier_init: False
 ld_xavier_init: False 
-use_ld: False
+use_d: True
 
 # tradeoff parameters
 lambda_gp: 10
-lambda_1: 10 # att discriminator (original value = 1)
+lambda_1: 50 # att discriminator (original value = 1)
 lambda_2: 100 # att generator (original value = 10)
 lambda_3: 1000 # reconstruction generator (original value = 100)
-lambda_4: 1 # adversarial discriminator
-lambda_5: 1 # adversarial generator
 
 # attributes
-att_activation: 'sigmoid' # 'tanh', 'sigmoid' or ''
-att_loss: 'l1' # 'l1', 'binary_cross_entropy' or 'cross_entropy'
+att_activation: sigmoid # tanh, sigmoid or 
+att_loss: l1 # l1, binary_cross_entropy or cross_entropy
 att_max: 1
-att_min: 1
-num_samples: 1
-att_neg: False
-att_diff: False
+att_min: 0
+num_samples: 9
 attrs: [ metallic ]
 uniform: True
 default_att: 0.5
 
 # iterations
-max_epochs: 40
-lr_decay_iters: 100000000
+max_epochs: 50
+lr_decay_iters: 55000
 
 # steps:
 summary_step: 100

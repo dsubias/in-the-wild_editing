@@ -25,16 +25,18 @@ import time
 import logging
 import os
 from utils.im_util import denorm
-from PIL import Image
 import numpy as np
 import cv2
 from matplotlib import cm
 cudnn.benchmark = True
 import time
-from pytorch_msssim import ssim, ms_ssim, SSIM, MS_SSIM
+from pytorch_msssim import ssim
 import moviepy.video.io.ImageSequenceClip
 
+N_SAMPLES_VIDEO = 1
+
 class STGANAgent(object):
+
     def __init__(self, config):
         assert config.att_loss in ['l1', 'cross_entropy','binary_cross_entropy']
         assert config.att_activation in ['','tanh','sigmoid']
@@ -42,27 +44,31 @@ class STGANAgent(object):
         self.logger = logging.getLogger("STGAN")
         self.logger.info("Creating STGAN architecture...")
 
-        if (self.config.mode == 'test' and self.config.plot_metrics) or self.config.video:
-            self.att_max = 1
-            self.config.att_min = 1
+        # Just one sample whne editing video or compute metrics
+        if self.config.mode == 'edit_video' or self.config.mode == 'plot_metrics':
+            self.config.att_max = 1
+            self.config.att_min = self.config.att_max
             self.config.num_samples =  1
-            self.config.add_org = True
-            if self.config.video:
-                self.config.add_bg  = True
-            else:
-                self.config.add_bg  = False
 
         self.G = Generator(len(self.config.attrs), self.config.g_conv_dim, self.config.g_layers,
-                           self.config.shortcut_layers, use_stu=self.config.use_stu, one_more_conv=self.config.one_more_conv,deconv= self.config.deconv,xavier_init=self.config.g_xavier_init)
-        self.D = Discriminator(self.config.image_size, len(
-            self.config.attrs), self.config.d_conv_dim, self.config.d_fc_dim, self.config.d_layers,self.config.att_activation,xavier_init=self.config.d_xavier_init)
+                           self.config.shortcut_layers, use_stu=self.config.use_stu, one_more_conv=self.config.one_more_conv,deconv= self.config.deconv)
+        if self.config.use_d:
+            self.D = Discriminator(self.config.image_size, len(
+            self.config.attrs), self.config.d_conv_dim, self.config.d_fc_dim, self.config.d_layers,self.config.att_activation)
 
-        if  self.config.use_ld:
-            self.LD = Latent_Discriminator(num_attrs=len(self.config.attrs),image_size=self.config.image_size,xavier_init=self.config.ld_xavier_init,att_activation=self.config.att_activation)
+
+
+        if self.config.mode == 'plot_metrics':
+            G_total_params = sum(p.numel() for p in self.G.parameters() if p.requires_grad)
+            D_total_params = sum(p.numel() for p in self.D.parameters() if p.requires_grad)
+            print('Number of parameters of G', G_total_params)
+            print('Number of parameters of D',D_total_params)
+            print('Total parameters of the framework (G+D)',G_total_params+D_total_params)
+
 
         self.data_loader = globals()['{}_loader'.format(self.config.dataset)](
-            self.config.data_root, self.config.train_file, self.config.test_file, self.config.mode, self.config.attrs,
-            self.config.crop_size, self.config.image_size, self.config.batch_size, self.config.data_augmentation, mask_input_bg=config.mask_input_bg,att_neg=self.config.att_neg,thres_edition=self.config.thres_edition)
+            self.config.data_root, self.config.train_file, self.config.val_file, self.config.test_file, self.config.mode, self.config.attrs,
+            self.config.crop_size, self.config.image_size, self.config.batch_size, self.config.data_augmentation, mask_input_bg=config.mask_input_bg)
 
         self.current_iteration = 0
         self.current_epoch = 0
@@ -82,48 +88,43 @@ class STGANAgent(object):
         G_state = {
             'state_dict': self.G.state_dict(),
             'optimizer': self.optimizer_G.state_dict(),
-        }
-        D_state = {
-            'state_dict': self.D.state_dict(),
-            'optimizer': self.optimizer_D.state_dict(),
-        }
-            
+            'lr_scheduler': self.lr_scheduler_G.state_dict()
+        }   
         G_filename = 'G_{}.pth.tar'.format(self.current_iteration)
-        D_filename = 'D_{}.pth.tar'.format(self.current_iteration)
-        
-
         torch.save(G_state, os.path.join(
             self.config.checkpoint_dir, G_filename))
-        torch.save(D_state, os.path.join(
-            self.config.checkpoint_dir, D_filename))
+        
 
-        if  self.config.use_ld:
-            LD_state = {
-                'state_dict': self.LD.state_dict(),
-                'optimizer': self.optimizer_LD.state_dict(),
+        if self.config.use_d:
+            D_state = {
+                'state_dict': self.D.state_dict(),
+                'optimizer': self.optimizer_D.state_dict(),
+                'lr_scheduler': self.lr_scheduler_D.state_dict()
             }
-            LD_filename = 'LD_{}.pth.tar'.format(self.current_iteration)
-            torch.save(LD_state, os.path.join(
-                        self.config.checkpoint_dir, LD_filename))
+            D_filename = 'D_{}.pth.tar'.format(self.current_iteration)
+            torch.save(D_state, os.path.join(
+            self.config.checkpoint_dir, D_filename))
 
     def make_video(self):
 
         fps=25
         imgs = os.listdir(self.config.video_dir)
         imgs.sort()
+        
         image_files = [os.path.join(self.config.video_dir,img)
                        for img in imgs
                        if img.endswith(".png")]
-                       
+                 
         clip = moviepy.video.io.ImageSequenceClip.ImageSequenceClip(image_files, fps=fps)
         clip.write_videofile(os.path.join(self.config.video_dir,'video.mp4'))
                                 
     def load_checkpoint(self):
         if self.config.checkpoint is None:
             self.G.to(self.device)
-            self.D.to(self.device)
-            if self.config.use_ld:
-                self.LD.to(self.device)
+
+            if self.config.use_d:
+                self.D.to(self.device)
+
             return
 
         G_filename = 'G_{}.pth.tar'.format(self.config.checkpoint)
@@ -134,38 +135,30 @@ class STGANAgent(object):
         self.G.to(self.device)
         
         if self.config.mode == 'train':
-            D_filename = 'D_{}.pth.tar'.format(self.config.checkpoint)
-            D_checkpoint = torch.load(os.path.join(
-            self.config.checkpoint_dir, D_filename), map_location=self.device)
-            D_to_load = {k.replace('module.', ''): v for k,
+
+            if self.config.use_d:
+
+                D_filename = 'D_{}.pth.tar'.format(self.config.checkpoint)
+                D_checkpoint = torch.load(os.path.join(
+                self.config.checkpoint_dir, D_filename), map_location=self.device)
+                D_to_load = {k.replace('module.', ''): v for k,
                      v in D_checkpoint['state_dict'].items()}
-            self.D.load_state_dict(D_to_load)
-            self.D.to(self.device)
+                self.D.load_state_dict(D_to_load)
+                self.D.to(self.device)
+                self.optimizer_D.load_state_dict(D_checkpoint['optimizer'])
+                self.lr_scheduler_D.load_state_dict(D_checkpoint['lr_scheduler'])
+
             self.current_epoch = int(self.config.checkpoint // self.data_loader.train_iterations)
             self.current_iteration = self.config.checkpoint
             self.optimizer_G.load_state_dict(G_checkpoint['optimizer'])
-            self.optimizer_D.load_state_dict(D_checkpoint['optimizer'])
+            self.lr_scheduler_G.load_state_dict(G_checkpoint['lr_scheduler'])
 
-            if  self.config.use_ld:
-                LD_filename = 'LD_{}.pth.tar'.format(self.config.checkpoint)
-                LD_checkpoint = torch.load(os.path.join(
-                self.config.checkpoint_dir, LD_filename), map_location=self.device)
-                LD_to_load = {k.replace('module.', ''): v for k,
-                        v in LD_checkpoint['state_dict'].items()}
-                self.LD.load_state_dict(LD_to_load)
-                self.LD.to(self.device)
-                self.optimizer_LD.load_state_dict(LD_checkpoint['optimizer'])
-        
-
-    def create_interpolated_attr(self, c_org, selected_attrs=None,att_min=-1, att_max=1, num_samples=9):
+    def create_interpolated_attr(self, c_org, selected_attrs=None,att_min=0, att_max=1, num_samples=9):
         """Generate target domain labels for debugging and testing: linearly sample attribute. Contains a list for each attr"""
         all_lists = []
         for i in range(len(selected_attrs)):
             c_trg_list = []  
-            if self.config.video:
-                alphas = linspace(1, 1, 1)
-            else: 
-                alphas = linspace(att_min, att_max, num_samples)
+            alphas = linspace(att_min, att_max, num_samples)
             for alpha in alphas:
                 c_trg = c_org.clone()
                 c_trg[:, i] = torch.full_like(c_trg[:, i], alpha)
@@ -176,6 +169,10 @@ class STGANAgent(object):
 
     def img2mse(self, x, y):
         return torch.mean((x - y) ** 2)
+
+    def img2mae(self, x, y):
+        mae = nn.L1Loss()
+        return mae(x, y)
 
     def mse2psnr(self, x):
         return -10. * torch.log(x) / torch.log(torch.Tensor([10.]).to(self.device))
@@ -207,20 +204,49 @@ class STGANAgent(object):
         return torch.mean((dydx_l2norm-1)**2)
 
     def run(self):
-        assert self.config.mode in ['train', 'test','latent']
+        assert self.config.mode in ['train', 'edit_images','edit_video', 'plot_metrics']
         # try:
         if self.config.mode == 'train':
 
             self.train()
 
-        elif self.config.mode == 'latent':
+        elif self.config.mode == 'edit_images':
+            
+            # When editing in the wild, we asume the original value is 0.5
+            idw_atts = torch.ones(1,len(self.config.attrs)) * 0.5
+            c_trg_all = self.create_interpolated_attr(
+                                                      idw_atts,
+                                                      self.config.attrs, 
+                                                      self.config.att_min, 
+                                                      self.config.att_max, 
+                                                      self.config.num_samples
+                                                      )
+            # Edit images
+            self.edit_images(self.config.sample_dir, c_trg_all, video=False)
 
-            self.latent()
+        elif self.config.mode == 'edit_video':
+            
+            # When editing in the wild, we asume the original value is 0.5
+            # Only one editing per frame
+            idw_atts = torch.ones(1,len(self.config.attrs)) * 0.5
+            print(self.config.video_dir)
+            os.system('rm -rf %s/*' % self.config.video_dir)
+            self.config.add_bg = True
+            c_trg_all = self.create_interpolated_attr(
+                                                      idw_atts,
+                                                      self.config.attrs, 
+                                                      self.config.att_value_frame, 
+                                                      self.config.att_value_frame, 
+                                                      N_SAMPLES_VIDEO
+                                                      )
+            # Edit frames
+            self.edit_images(self.config.video_dir, c_trg_all, video=True)
+            self.make_video()
 
-        else:
-            self.test()
-            if self.config.video:
-                self.make_video()
+        elif self.config.mode == 'plot_metrics':
+
+            self.plot_metrics()
+
         # except KeyboardInterrupt:
             # self.logger.info('You have entered CTRL+C.. Wait to finalize')
         # except Exception as e:
@@ -235,30 +261,25 @@ class STGANAgent(object):
         
         self.optimizer_G = optim.Adam(self.G.parameters(), self.config.g_lr, [
             self.config.beta1, self.config.beta2])
-        self.optimizer_D = optim.Adam(self.D.parameters(), self.config.d_lr, [
-            self.config.beta1, self.config.beta2])
         self.lr_scheduler_G = optim.lr_scheduler.StepLR(
             self.optimizer_G, step_size=self.config.lr_decay_iters, gamma=0.1)
-        self.lr_scheduler_D = optim.lr_scheduler.StepLR(
-            self.optimizer_D, step_size=self.config.lr_decay_iters, gamma=0.1)
         
-        if  self.config.use_ld:
 
-            self.optimizer_LD = optim.Adam(self.LD.parameters(), self.config.d_lr, [
-            self.config.beta1, self.config.beta2])
-            self.lr_scheduler_LD = optim.lr_scheduler.StepLR(
-            self.optimizer_LD, step_size=self.config.lr_decay_iters, gamma=0.1)
+        if self.config.use_d:
+            self.optimizer_D = optim.Adam(self.D.parameters(), self.config.d_lr, [
+                self.config.beta1, self.config.beta2])
+            self.lr_scheduler_D = optim.lr_scheduler.StepLR(
+            self.optimizer_D, step_size=self.config.lr_decay_iters, gamma=0.1)
 
         self.load_checkpoint()
 
         if self.cuda and self.config.ngpu > 1:
             self.G = nn.DataParallel(
                 self.G, device_ids=list(range(self.config.ngpu)))
-            self.D = nn.DataParallel(
+            
+            if self.config.use_d:
+                self.D = nn.DataParallel(
                 self.D, device_ids=list(range(self.config.ngpu)))
-            if  self.config.use_ld:
-                self.LD = nn.DataParallel(
-                    self.LD, device_ids=list(range(self.config.ngpu)))
 
         val_iter = iter(self.data_loader.val_loader)
 
@@ -271,10 +292,6 @@ class STGANAgent(object):
         all_sample_list = self.create_interpolated_attr(
             c_org_sample, self.config.attrs, self.config.att_min,self.config.att_max, self.config.num_samples)
 
-        self.g_lr = self.lr_scheduler_G.get_lr()[0]
-        self.d_lr = self.lr_scheduler_D.get_lr()[0]
-        self.ld_lr = self.lr_scheduler_D.get_lr()[0]
-
         if self.config.histogram:
             nb_bins = 256
             att_bins = 300
@@ -285,7 +302,6 @@ class STGANAgent(object):
             count_b = np.zeros(nb_bins, dtype=np.float128)
             count_att = np.zeros((len(self.config.attrs),att_bins), dtype=np.float128)
             count_att_target = np.zeros((len(self.config.attrs),att_bins), dtype=np.float128)
-            count_att_diff = np.zeros((len(self.config.attrs),att_bins), dtype=np.float128)
             hue_range = np.linspace(0,hue_bins-1,hue_bins)
             sat_range = np.linspace(0,1,sat_bins)
             value_range = np.linspace(0,255,value_bins)
@@ -296,7 +312,6 @@ class STGANAgent(object):
             count_v = np.zeros(value_bins, dtype=np.float128)
             hist_att = [None] * len(self.config.attrs)
             hist_att_target = [None] * len(self.config.attrs)
-            hist_att_diff = [None] * len(self.config.attrs)
 
         if self.config.checkpoint:
             init_iteration = int(self.config.checkpoint % self.data_loader.train_iterations)
@@ -305,10 +320,11 @@ class STGANAgent(object):
 
         data_iter = iter(self.data_loader.train_loader)
         start_time = time.time()
-        self.D.train()
+        
         self.G.train()
-        if self.config.use_ld:
-            self.LD.train()
+
+        if self.config.use_d:
+            self.D.train()
 
         for epoch in range(self.current_epoch, self.config.max_epochs):
             
@@ -373,141 +389,94 @@ class STGANAgent(object):
                 c_org = c_org.to(self.device)           # original domain labels
                 # labels for computing classification loss
                 label_org = label_org.to(self.device)
-
-                # =================================================================================== #
-                #                         1. Train the latent discriminator                           #
-                # =================================================================================== #
                 scalars = {}
-                if self.config.use_ld:
 
-                    z,_ = self.G.encode(x_real)
-
-                    for i in range(self.config.ld_n_critic):
-
-                        out_att = self.LD(z)
-                        ld_loss = self.regression_loss(out_att, label_org)
-                        self.optimizer_LD.zero_grad()
-                        ld_loss.backward(retain_graph=True)
-                        self.optimizer_LD.step()
-                        scalars['LD/loss'] = ld_loss.item()
 
                 # =================================================================================== #
-                #                             2. Train the discriminator                              #
+                #                             1. Train the discriminator                              #
                 # =================================================================================== #
 
-                for i in range(self.config.n_critic):
-                    # compute loss with real images
-                    out_src, out_cls = self.D(x_real)
-                    d_loss_real = - torch.mean(out_src)
-                    if self.config.att_loss == 'cross_entropy':
-                        print('F')
-                        d_loss_cls = self.loss_cross_entropy(out_cls,label_org)
-                    elif self.config.att_loss == 'binary_cross_entropy':
-                        print('FF')
-                        d_loss_cls = self.classification_loss(out_cls, label_org)
-                    elif self.config.att_loss == 'l1':
-                        d_loss_cls = self.regression_loss(out_cls, label_org) 
+                if self.config.use_d:
+
+                    for i in range(self.config.n_critic):
+                        # compute loss with real images
+                        out_src, out_cls = self.D(x_real)
+                        d_loss_real = - torch.mean(out_src)
+                        if self.config.att_loss == 'cross_entropy':
+                            print('F')
+                            d_loss_cls = self.loss_cross_entropy(out_cls,label_org)
+                        elif self.config.att_loss == 'binary_cross_entropy':
+                            print('FF')
+                            d_loss_cls = self.classification_loss(out_cls, label_org)
+                        elif self.config.att_loss == 'l1':
+                            d_loss_cls = self.regression_loss(out_cls, label_org) 
 
 
-                    # generate target domain labels randomly
-                    rand_idx = torch.randperm(label_org.size(0))
-                    if self.config.att_neg:
+                        # generate target domain labels randomly or from the original data
                         if self.config.uniform:
-                            label_trg = torch.rand_like(label_org) * ( 2* self.config.thres_edition) - self.config.thres_edition
+
+                            label_trg = torch.rand_like(label_org)
                         else:
-                            label_trg = label_org[rand_idx]  * self.config.thres_edition
-                    else:
 
-                        if self.config.uniform:
-                            label_trg = torch.rand_like(label_org) * self.config.thres_edition
-                        else:
-                            label_trg = label_org[rand_idx] * self.config.thres_edition
+                            rand_idx = torch.randperm(label_org.size(0))
+                            label_trg = label_org[rand_idx] 
 
-                    # labels for computing classification loss
-                    label_trg = label_trg.to(self.device)
-                    c_trg = label_trg.clone()
-                    c_trg = c_trg.to(self.device)           # target domain labels
+                        # labels for computing classification loss
+                        label_trg = label_trg.to(self.device)
+                        c_trg = label_trg.clone()
+                        c_trg = c_trg.to(self.device)           # target domain labels
 
-                    # compute loss with fake images
-                    if self.config.att_diff:
-                        attr_diff = c_trg - c_org
-
-                        if self.config.uniform: 
-                            attr_diff = attr_diff * self.config.thres_int
-                        else:
-                            attr_diff = attr_diff # *  torch.rand_like(attr_diff) * self.config.thres_int
-                        x_fake = self.G(x_real, attr_diff)
-
-                    else:
-                        
+                        # compute loss with fake images
                         x_fake = self.G(x_real, c_trg)
-
-                    if self.config.histogram:
-
-                        for i in range(0,len(self.config.attrs)):
-
-                            if self.config.att_neg:
-                                range_= [-self.config.thres_edition, self.config.thres_edition ]
-                            else:
-                                range_= [0, self.config.thres_edition ]
-
-                            hist_att[i] = np.histogram(c_org[i].cpu().numpy(), bins=att_bins, range=range_)
-                            hist_att_target[i] = np.histogram(c_trg[i].cpu().numpy(), bins=att_bins, range=range_)
-                            if self.config.att_neg:
-                                range_= [2*-self.config.thres_edition, 2 * self.config.thres_edition ]
-                            else:
-                                range_= [-self.config.thres_edition, self.config.thres_edition]
-                            if self.config.att_diff:
-                                hist_att_diff[i] = np.histogram(attr_diff.cpu().numpy(), bins=att_bins, range=range_)
-                            count_att[i] += hist_att[i][0]
                             
-                            count_att_target[i] += hist_att_target[i][0]
-                            if self.config.att_diff:
-                                count_att_diff[i] += hist_att_diff[i][0]
-                        
-                    out_src, out_cls = self.D(x_fake.detach())
-                    d_loss_fake = torch.mean(out_src)
+                        out_src, out_cls = self.D(x_fake.detach())
+                        d_loss_fake = torch.mean(out_src)
 
-                    # compute loss for gradient penalty
-                    alpha = torch.rand(x_real.size(0), 1, 1, 1).to(self.device)
+                        # compute loss for gradient penalty
+                        alpha = torch.rand(x_real.size(0), 1, 1, 1).to(self.device)
 
-                    x_hat = (alpha * x_real.data + (1 - alpha)* x_fake.data).requires_grad_(True)
+                        x_hat = (alpha * x_real.data + (1 - alpha)* x_fake.data).requires_grad_(True)
 
-                    out_src, _ = self.D(x_hat)
-                    d_loss_gp = self.gradient_penalty(out_src, x_hat)
+                        out_src, _ = self.D(x_hat)
+                        d_loss_gp = self.gradient_penalty(out_src, x_hat)
 
-                    # backward and optimize
-                    d_loss_adv = d_loss_real + d_loss_fake + self.config.lambda_gp * d_loss_gp
-                    d_loss = self.config.lambda_4 * d_loss_adv + self.config.lambda_1 * d_loss_cls
-                    self.optimizer_D.zero_grad()
-                    d_loss.backward(retain_graph=True)
-                    self.optimizer_D.step()
+                        # backward and optimize
+                        d_loss_adv = d_loss_real + d_loss_fake + self.config.lambda_gp * d_loss_gp
+                        d_loss = d_loss_adv + self.config.lambda_1 * d_loss_cls
+                        self.optimizer_D.zero_grad()
+                        d_loss.backward(retain_graph=True)
+                        self.optimizer_D.step()
 
-                    # summarize
-                    
-                    scalars['D/loss'] = d_loss.item()
-                    scalars['D/loss_adv'] = d_loss_adv.item()
-                    scalars['D/loss_cls'] = d_loss_cls.item()
-                    scalars['D/loss_real'] = d_loss_real.item()
-                    scalars['D/loss_fake'] = d_loss_fake.item()
-                    scalars['D/loss_gp'] = d_loss_gp.item()
+                        # summarize
+                        scalars['D/loss'] = d_loss.item()
+                        scalars['D/loss_adv'] = d_loss_adv.item()
+                        scalars['D/loss_cls'] = d_loss_cls.item()
+                        scalars['D/loss_real'] = d_loss_real.item()
+                        scalars['D/loss_fake'] = d_loss_fake.item()
+                        scalars['D/loss_gp'] = d_loss_gp.item()
+                
+                if self.config.histogram:
+
+                    for i in range(0,len(self.config.attrs)):
+
+                        range_= [0, 1]
+                        hist_att[i] = np.histogram(c_org[i].cpu().numpy(), bins=att_bins, range=range_)
+                        hist_att_target[i] = np.histogram(label_trg[i].cpu().numpy(), bins=att_bins, range=range_)
+                        range_= [-1, 1]
+                        count_att[i] += hist_att[i][0]                   
+                        count_att_target[i] += hist_att_target[i][0]
 
                 # =================================================================================== #
-                #                               3. Train the generator                                #
+                #                               2. Train the generator                                #
                 # =================================================================================== #
 
-                rand_idx = torch.randperm(label_org.size(0))
-                if self.config.att_neg:
-                    if self.config.uniform:
-                        label_trg = torch.rand_like(label_org) * ( 2* self.config.thres_edition) - self.config.thres_edition
-                    else:
-                        label_trg = label_org[rand_idx]  * self.config.thres_edition
+                if self.config.uniform:
+
+                    label_trg = torch.rand_like(label_org)
                 else:
 
-                    if self.config.uniform:
-                        label_trg = torch.rand_like(label_org) * self.config.thres_edition
-                    else:
-                        label_trg = label_org[rand_idx] * self.config.thres_edition
+                    rand_idx = torch.randperm(label_org.size(0))
+                    label_trg = label_org[rand_idx] 
 
                 # labels for computing classification loss
                 label_trg = label_trg.to(self.device)
@@ -515,59 +484,37 @@ class STGANAgent(object):
                 c_trg = c_trg.to(self.device)           # target domain labels  
                 
                 # compute loss with fake images
-                if self.config.att_diff:
-                    attr_diff = c_trg - c_org
+                x_fake = self.G(x_real, c_trg)  
 
-                    if self.config.uniform: 
-                            attr_diff = attr_diff * self.config.thres_int
-                    else:
-                        attr_diff = attr_diff # *  torch.rand_like(attr_diff) * self.config.thres_int
-                    x_fake = self.G(x_real, attr_diff)
+                if self.config.use_d:
+                    out_src, out_cls = self.D(x_fake)
+                    g_loss_adv = - torch.mean(out_src)
 
-                else:
+                    if self.config.att_loss == 'cross_entropy':
                         
-                    x_fake = self.G(x_real, c_trg)  
+                        g_loss_cls = self.loss_cross_entropy(out_cls, label_trg)
 
-                out_src, out_cls = self.D(x_fake)
-                g_loss_adv = - torch.mean(out_src)
+                    elif self.config.att_loss == 'binary_cross_entropy':
+                        
+                        g_loss_cls = self.classification_loss(out_cls, label_trg)
 
-                if self.config.att_loss == 'cross_entropy':
-                    print('F')
-                    g_loss_cls = self.loss_cross_entropy(out_cls, label_trg)
-
-                elif self.config.att_loss == 'binary_cross_entropy':
-                    print('FF')
-                    g_loss_cls = self.classification_loss(out_cls, label_trg)
-
-                elif self.config.att_loss == 'l1':
-                    
-                    g_loss_cls = self.regression_loss(out_cls, label_trg) 
+                    elif self.config.att_loss == 'l1':
+                        
+                        g_loss_cls = self.regression_loss(out_cls, label_trg) 
 
                 # target-to-original domain
-                if self.config.att_diff:
-                    
-                    x_reconst = self.G(x_real, c_org - c_org)
-                else:
-                    
-                    x_reconst = self.G(x_real, c_org)
-
+                x_reconst = self.G(x_real, c_org)
                 g_loss_rec = torch.mean(torch.abs(x_real - x_reconst))
                 
-
                 # compute the PSNR
                 img_mse = self.img2mse(x_reconst, x_real)
                 psnr = self.mse2psnr(img_mse)
 
                 # backward and optimize
-                g_loss = self.config.lambda_5 * g_loss_adv + self.config.lambda_3 * \
-                    g_loss_rec + self.config.lambda_2 * g_loss_cls
-
-                if self.config.use_ld:
-                    z,_ = self.G.encode(x_real)
-                    out_att = self.LD(z)
-                    g_loss_latent = self.regression_loss(out_att, label_org) 
-                    g_loss += self.config.lambda_2 *  g_loss_latent
-                    scalars['G/loss_latent'] = g_loss_latent.item()
+                g_loss =   self.config.lambda_3 * g_loss_rec 
+                
+                if self.config.use_d:
+                    g_loss += g_loss_adv + self.config.lambda_2 * g_loss_cls
 
                 self.optimizer_G.zero_grad()
                 g_loss.backward()
@@ -575,15 +522,19 @@ class STGANAgent(object):
 
                 # summarize
                 scalars['G/loss'] = g_loss.item()
-                scalars['G/loss_adv'] = g_loss_adv.item()
-                scalars['G/loss_cls'] = g_loss_cls.item()
                 scalars['G/loss_rec'] = g_loss_rec.item()
-                scalars['G/psnr'] = psnr
+
+                if self.config.use_d:
+                    scalars['G/loss_adv'] = g_loss_adv.item()
+                    scalars['G/loss_cls'] = g_loss_cls.item()
+                    scalars['G/psnr'] = psnr
+                    scalars['G/lr'] = self.lr_scheduler_G.get_last_lr()
+                    scalars['D/lr'] = self.lr_scheduler_D.get_last_lr()
 
                 self.current_iteration += 1
 
                 # =================================================================================== #
-                #                                 4. Miscellaneous                                    #
+                #                                 3. Miscellaneous                                    #
                 # =================================================================================== #
 
                 if self.current_iteration % self.config.summary_step == 0:
@@ -620,42 +571,28 @@ class STGANAgent(object):
                             ax[2].set_facecolor('coral')
                             plt.savefig(result_path)
                            
-                        if self.config.att_diff:
-                            num_att_hist = 3
-                        else:
-                            num_att_hist = 2
+                        num_att_hist = 2
                             
                         for i in range(0,len(self.config.attrs)):
                             
                             fig, ax = plt.subplots(num_att_hist,1,figsize=(8,10))
                             bins = hist_att[i][1]
                             ax[0].set_title('$att_s$')
-                            if self.config.att_neg:
-                                width_source = (2 * self.config.thres_edition) / att_bins
-                            else:
-                                width_source = self.config.thres_edition / att_bins
+                            width_source = 1 / att_bins
 
                             ax[0].bar(bins[:-1], count_att[i], color='b', alpha=0.5,width=width_source)
                             bins = hist_att_target[i][1]
                             ax[1].set_title('$att_t$')
                             ax[1].bar(bins[:-1], count_att_target[i], color='b', alpha=0.5,width=width_source)
-                            if self.config.att_diff:
-                                bins = hist_att_diff[i][1]
-                                ax[2].set_title('$att_{diff}$')
 
-                                if self.config.att_neg:
-                                    width_diff = 2*((2 * self.config.thres_edition) / att_bins)
-                                else:
-                                    width_diff = 2*(self.config.thres_edition / att_bins)
-                                    
-                                ax[2].bar(bins[:-1], count_att_diff[i], color='b', alpha=0.5,width=width_diff)
                             result_path = os.path.join(self.config.histogram_dir, 'hist_att_{}_{}.png'.format(self.config.attrs[i],self.current_iteration))
                             plt.savefig(result_path)
                             plt.close('all')
                     
-
                     self.G.eval()
+
                     with torch.no_grad():
+
                         att_idx = 0
                         for c_sample_list in all_sample_list:
                             
@@ -663,12 +600,7 @@ class STGANAgent(object):
 
                             for c_trg_sample in c_sample_list:           
                                 
-                                if self.config.att_diff:
-                                    attr_diff = (c_trg_sample -c_org_sample).to(self.device)
-                                    x_fake = self.G(x_sample, attr_diff.to(self.device))
-                                else:
-                                    x_fake = self.G(x_sample, c_trg_sample.to(self.device))
-
+                                x_fake = self.G(x_sample, c_trg_sample.to(self.device))
                                 x_fake = torch.cat(
                                     [x_fake, ch_4_sample], dim=1)
                                 x_fake_list.append(x_fake)
@@ -690,179 +622,190 @@ class STGANAgent(object):
                     self.save_checkpoint()
 
                 self.lr_scheduler_G.step()
-                self.lr_scheduler_D.step()
-                if self.config.use_ld:
-                    self.lr_scheduler_LD.step()
+
+                if self.config.use_d:
+                    self.lr_scheduler_D.step()
+
                 with torch.cuda.device('cuda:'+self.config.gpus):
                     torch.cuda.empty_cache()
             
             init_iteration = 0
-    def test(self):
+
+    def add_background(self, x_edited, alpha_channel, mask, rgb):
+        
+        denorm_x_edited = denorm(x_edited, self.device, self.config.add_bg)[0]
+        inv_mask = torch.where(mask.to(self.device) == 1, 0,1)
+        denorm_x_edited = denorm_x_edited * inv_mask
+
+        # Mask object and background
+        alpha_channel_binary = torch.where(alpha_channel <= 0.6,  torch.tensor(1, dtype=alpha_channel.dtype).to(self.device) ,torch.tensor(0, dtype=alpha_channel.dtype).to(self.device))
+        alpha_channel_binary_inv = torch.where(alpha_channel_binary == 0.,  torch.tensor(1, dtype=alpha_channel.dtype).to(self.device) ,torch.tensor(0, dtype=alpha_channel.dtype).to(self.device))
+        background = rgb * alpha_channel_binary
+        edited_object = denorm_x_edited * alpha_channel_binary_inv
+
+        # Add background to the edited image
+        image = edited_object + background
+        image = torch.cat([image, torch.ones(1,rgb.shape[1],
+                                         rgb.shape[2],device=self.device)], dim=0)
+        return image
+
+    def plot_metrics(self):
+
+        psnr_file = open(os.path.join(self.config.metric_dir, 'psnr.txt'),'w')
+        ssim_file = open(os.path.join(self.config.metric_dir, 'ssim.txt'),'w')
+        mse_file = open(os.path.join(self.config.metric_dir, 'mse.txt'),'w')
+        mae_file = open(os.path.join(self.config.metric_dir, 'mae.txt'),'w')
+
+        # TODO Add procesing loop
         self.load_checkpoint()
         self.G.to(self.device)
-
         tqdm_loader = tqdm(self.data_loader.test_loader, total=self.data_loader.test_iterations,
-                           desc='Testing at checkpoint {}'.format(self.config.checkpoint))
-
+                           desc='Computing metrics at checkpoint {}'.format(self.config.checkpoint))
         self.G.eval()
+
         with torch.no_grad():
-            pibot = torch.ones(1,len(self.config.attrs)) * self.config.default_att
-            c_trg_all = self.create_interpolated_attr(pibot, self.config.attrs, self.config.att_min, self.config.att_max, self.config.num_samples)
-            if self.config.mode == 'test' and self.config.plot_metrics:
-                psnr_file = open(os.path.join(self.config.metric_dir, 'psnr.txt'),'w')
-                ssim_file = open(os.path.join(self.config.metric_dir, 'ssim.txt'),'w')
-            for i, (x_real, c_org, filename,illum,mask) in enumerate(tqdm_loader):
+
+            for i, (x_real, c_org, filename,mask,rgb) in enumerate(tqdm_loader):
                 
+                rgb = rgb.to(self.device) 
                 att_idx = 0
                 x_real = x_real.to(self.device)
                 ch_4 = x_real[:, 3:]
-                x_real = x_real[:, :3]
+                x_fake_list = []
 
-                for c_trg_list in c_trg_all:
-                    if self.config.mode == 'test' and self.config.plot_metrics:
-                        c_trg_list = c_org
-                    
-                    if self.config.split:
-                        x_fake_list = []
-                        
-                        for n in range(0, x_real.shape[0]):
-                            
-                            if self.config.add_org:
-                                if self.config.add_bg:
-                                    x_fake_list.append([x_real[n]])
-                                else:
-                                    x_fake_list.append([torch.cat([x_real[n], ch_4[n]], dim=0)])
-                            else:
-                                x_fake_list.append([])
+                for c_trg_sample in c_org:
 
-                    else:
-                        x_fake_list = [torch.cat([x_real, ch_4], dim=1)]
+                    x_real = x_real[:, :3]
+                    x_fake = self.G(x_real, c_trg_sample.to(self.device))
 
-                    for c_trg_sample in c_trg_list:
-                        if self.config.att_diff:
-                            attr_diff = c_trg_sample.to(
-                                self.device) - c_org.to(self.device)
-                            x_fake = self.G(x_real, attr_diff.to(self.device))
-                        else:
-                            x_fake = self.G(
-                                x_real, c_trg_sample.to(self.device))
-
-                        if self.config.split:
-
-                            for n in range(0, x_real.shape[0]):                     
-
-                                if self.config.add_bg:
-                                    
-                                    illum_n = illum[n].to(self.device)
-                                    inv_mask = torch.where(mask.to(self.device) == 1, 0,1)
-                                    figure = denorm(x_fake[n], self.device,self.config.add_bg)[0] *inv_mask
-                                    fig = illum_n + figure
-                                    
-                                else:
-                                    if not self.config.plot_metrics:
-                                        fig = x_fake[n] * (ch_4[n] != 0)
-                                        fig = torch.cat([fig, ch_4[n] != 0], dim=0)
-                                        fig = denorm(fig, self.device,self.config.add_bg)[0]
-                                    else:
-                                        fig = torch.cat([x_fake[n] , ch_4[n]], dim=0)
-                                    
-                                    
-                                x_fake_list[n].append(fig)
-
-                        else:
-
-                            x_fake = torch.cat([x_fake, ch_4], dim=1)
-                            x_fake_list.append(x_fake)
-                        
-                    if self.config.split:
-                        
-                        for n in range(0, x_real.shape[0]):
-                            if not self.config.video:
-                                name = '{}_{}_{}_[{},{}]_{}.png'.format(self.config.checkpoint,n, i + 1,self.config.att_min,self.config.att_max,self.config.attrs[att_idx])
-                            else:
-                                name = '{}-{}.png'.format(filename[0],self.config.attrs[att_idx])
-                            if self.config.mode == 'test' and self.config.plot_metrics:
+                    for n in range(0, x_real.shape[0]):                     
                                 
-                                real = x_fake_list[n][0]
-                                rec = x_fake_list[n][1]
-                                mse=self.img2mse(real,rec)
-                                psnr_file.write(#name+' '+
-                                                str(self.mse2psnr(mse).item())+'\n')
-                                real = (real + 1) / 2 
-                                rec = (rec + 1) / 2 
-                                real =real.expand(1,4,256,256)
-                                rec =rec.expand(1,4,256,256)
-                                ssim_file.write(#name+' '+
-                                                str(ssim( real, rec, data_range=1, size_average=False).item() )+'\n')
-                                result_path = os.path.join(
-                                self.config.metric_dir, name)
-                                x_fake_list[n][1] = denorm(x_fake_list[n][1], self.device,self.config.add_bg)[0]
-                            elif not self.config.video:
-                                result_path = os.path.join(
-                                self.config.sample_dir, name)
+                        if self.config.add_bg:
+
+                            figure = denorm(x_fake[n], self.device, self.config.add_bg)[0]
+                            inv_mask = torch.where(mask.to(self.device) == 1, 0,1)
+                            figure= figure * inv_mask
+                            aux_1 = torch.where(ch_4[n] <= 0.6,  torch.tensor(1, dtype=ch_4[n].dtype).to(self.device) ,torch.tensor(0, dtype=ch_4[n].dtype).to(self.device))
+                            aux_inv = torch.where(aux_1 == 0.,  torch.tensor(1, dtype=ch_4[n].dtype).to(self.device) ,torch.tensor(0, dtype=ch_4[n].dtype).to(self.device))
+                            bg = rgb[0] * aux_1
+                            figure = figure * aux_inv
+                            fig = figure + bg
+                            fig = torch.cat([fig, torch.ones(1,rgb[n].shape[1],
+                                                        rgb[n].shape[2],device=self.device)], dim=0)
+                        else:
+                                    
+                            if self.config.video:
+                                        
+                                fig = x_fake[n] * (ch_4[n] != 0)
+                                fig = torch.cat([fig, ch_4[n] != 0], dim=0)
+                                fig = denorm(fig, self.device,self.config.add_bg)[0]
                             else:
-                                result_path = os.path.join(self.config.video_dir, name)
+                                        
+                                fig = torch.cat([x_fake[n] , ch_4[n]], dim=0)
+                                fig = denorm(fig, self.device,self.config.add_bg)[0]
+                                
+                        x_fake_list[n].append(fig)
+                        x_concat = torch.cat(x_fake_list[n], dim=2)
 
-                            if self.config.add_org:
-                                x_fake_list[n][0] = denorm(x_fake_list[n][0], self.device,self.config.add_bg)[0]
-                                if self.config.add_bg:
-                                    x_fake_list[n][0] = x_fake_list[n][0]* inv_mask +  illum[n].to(self.device)  
+                if not self.config.video:
+                    name = '{}_{}_{}_[{},{}]_{}.png'.format(self.config.checkpoint,n, i + 1,self.config.att_min,self.config.att_max,self.config.attrs[att_idx])
+                else:
+                    name = '{}-{}.png'.format(filename[0],self.config.attrs[att_idx])
 
-                            x_concat = torch.cat(x_fake_list[n], dim=2)
-                            image = make_grid(x_concat, nrow=1)
-                            
-                            save_image(image, result_path, nrow=1, padding=0)
-                            
-                    else:
-                        x_concat = torch.cat(x_fake_list, dim=3)
-                        image = make_grid(
-                            denorm(x_concat, device=self.device), nrow=1)
-                        result_path = os.path.join(
-                            self.config.sample_dir, 'sample_{}_{}.png'.format(i + 1,str(c_trg_sample)))
-                        save_image(image, result_path, nrow=1, padding=0)
 
-                    att_idx += 1
-        if self.config.mode == 'test' and self.config.plot_metrics:       
-            psnr_file.close()   
-            ssim_file.close()
+            for n in range(0, x_real.shape[0]):
+                if not self.config.video:
+                    name = '{}_{}_{}_[{},{}]_{}.png'.format(self.config.checkpoint,n, i + 1,self.config.att_min,self.config.att_max,self.config.attrs[att_idx])
+                else:
+                    name = '{}-{}.png'.format(filename[0],self.config.attrs[att_idx])
+                                    
+                real = x_fake_list[n][0]
+                rec = x_fake_list[n][1]
+                mse =self.img2mse(real,rec)
+                mae = self.img2mae(real,rec)
+                psnr_file.write(#name+' '+
+                                str(self.mse2psnr(mse).item())+'\n')
+                mse_file.write(#name+' '+
+                                                    str(mse.item())+'\n')
+                mae_file.write(#name+' '+
+                                                    str(mae.item())+'\n')               
+                real = (real + 1) / 2 
+                rec = (rec + 1) / 2 
+                real =real.expand(1,4,256,256)
+                rec =rec.expand(1,4,256,256)
+                ssim_file.write(#name+' '+
+                                                    str(ssim( real, rec, data_range=1, size_average=False).item() )+'\n')
+                result_path = os.path.join(
+                self.config.metric_dir, name)
+                x_fake_list[n][1] = denorm(x_fake_list[n][1], self.device,self.config.add_bg)[0]
+     
+        psnr_file.close()   
+        ssim_file.close()
+        mse_file.close()
+        mae_file.close()
 
-    def latent(self):
+    def edit_images(self, output_path, c_trg_all, video=False):
+
         self.load_checkpoint()
         self.G.to(self.device)
-
-
-        tqdm_loader = tqdm(self.data_loader.train_loader, total=self.data_loader.train_iterations,
-                            desc='Testing at checkpoint {}'.format(self.config.checkpoint))
-            
-        lentents = torch.tensor([]).to(self.device)
+        editing_type = 'VIDEO' if video else 'IMAGE'
+        tqdm_loader = tqdm(self.data_loader.test_loader, total=self.data_loader.test_iterations,
+                           desc='[{} EDITING]: Checkpoint {}'.format(editing_type, self.config.checkpoint))
         self.G.eval()
+
         with torch.no_grad():
 
-            for i, (x_real, c_org) in enumerate(tqdm_loader):
+            for n_batch, (x_real, mask,rgb) in enumerate(tqdm_loader):
+
+                rgb = rgb.to(self.device) 
+                att_idx = 0
                 x_real = x_real.to(self.device)
                 ch_4 = x_real[:, 3:]
-                x_real = x_real[:, :3]
-                attr_diff =  c_org.to(self.device) - c_org.to(self.device)
-                x_fake,z = self.G(x_real, attr_diff.to(self.device))
-                lentents = torch.cat([lentents, z], dim=0)
+                x_edited_list = []
 
-                if i == 100:
-                    break
+                for c_trg_list in c_trg_all:
 
-            n =1000
-            compare = torch.zeros(n, n).to(self.device) + (-1)
+                    # Save original image
+                    if self.config.add_bg:
 
-            for i  in trange(n):
+                        x_edited_list.append([torch.cat([rgb[0], 
+                                                       torch.ones((1,rgb[0].shape[1],
+                                                       rgb[0].shape[2]),
+                                                       device=self.device)], dim=0)])
+                    else:
 
-                for m  in range(n):
-                    
-                    compare[i,m] = torch.norm(lentents[i]-lentents[m])
+                        x_real_denorm = denorm(x_real, self.device, False)
+                        x_real_denorm = x_real_denorm[:,:3] 
+                        x_edited_list.append([torch.cat([x_real_denorm[0], ch_4[0]], dim=0)])
 
-            compare=torch.log(compare)
-            fig, ax = plt.subplots()
-            mat=ax.matshow(compare.cpu().numpy(), cmap=cm.jet)
-            plt.colorbar(mat)
-            plt.savefig('lantents.png')
+                    for c_trg_sample in c_trg_list:
+
+                        x_real = x_real[:, :3]
+                        x_edited = self.G(x_real, c_trg_sample.to(self.device))
+
+                        for n in range(0, x_real.shape[0]):                     
+                                
+                            if self.config.add_bg:
+
+                                final_image = self.add_background(x_edited[n], ch_4[n], mask, rgb[n])
+
+                            else:
+                                    
+                                final_image = torch.cat([x_edited[n] , ch_4[n]], dim=0)
+                                final_image = denorm(final_image, self.device,self.config.add_bg)[0]
+                                
+                            x_edited_list[n].append(final_image)
+                            x_concat = torch.cat(x_edited_list[n], dim=2)
+
+                    # Save edited images
+                    if not video:
+                        name = '{}_{}_{}_[{},{}]_{}.png'.format(self.config.checkpoint,n, n_batch + 1,self.config.att_min,self.config.att_max,self.config.attrs[att_idx])
+                    else:
+                        name = 'Frame_{}_{:05d}.png'.format(self.config.attrs[att_idx], n + x_real.shape[0] * n_batch)
+                    result_path = os.path.join(output_path, name)
+                    edited_images = make_grid(x_concat, nrow=1)
+                    save_image(edited_images, result_path, nrow=1, padding=0)
+                    att_idx += 1
 
 
     def finalize(self):
