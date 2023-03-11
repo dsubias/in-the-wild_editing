@@ -75,6 +75,7 @@ class Generator(nn.Module):
             in_channels = conv_dim * 2 ** i
 
         if use_stu:
+            
             self.stu = nn.ModuleList()
             for i in reversed(range(self.n_layers - 1 - self.shortcut_layers, self.n_layers - 1)):
                 self.stu.append(ConvGRUCell(

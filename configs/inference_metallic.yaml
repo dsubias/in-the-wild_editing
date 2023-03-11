@@ -4,7 +4,7 @@ output_name: textures_bg
 mode: test
 cuda: False
 ngpu: 1
-gpus: '1'
+gpus: '0'
 
 # data
 dataset: material
@@ -36,7 +36,7 @@ one_more_conv: True
 checkpoint: 55500 #56250
 
 # training
-batch_size: 32
+batch_size: 8
 beta1: 0.5
 beta2: 0.999
 g_lr: 0.0002
@@ -71,6 +71,6 @@ max_epochs: 50
 lr_decay_iters: 55000
 
 # steps:
-summary_step: 100
-sample_step: 750
-checkpoint_step: 750
+summary_step: 500
+sample_step: 2500
+checkpoint_step: 2500

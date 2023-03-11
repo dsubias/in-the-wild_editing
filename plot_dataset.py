@@ -58,7 +58,7 @@ colors_values  = cm.gray( value_range / float(value_bins-1))
 
 for batch in trange(0, data_loader.train_iterations, desc='Epoch {}'.format(0),leave=(0==config.max_epochs-1)):
 
-    x_real, label_org = next(data_iter)
+    x_real, label_org, rgb = next(data_iter)
 
 
     de_norm = denorm(x_real, device='cpu', add_bg=False)

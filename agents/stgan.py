@@ -89,7 +89,13 @@ class STGANAgent(object):
             'state_dict': self.G.state_dict(),
             'optimizer': self.optimizer_G.state_dict(),
             'lr_scheduler': self.lr_scheduler_G.state_dict()
-        }   
+        }
+        D_state = {
+            'state_dict': self.D.state_dict(),
+            'optimizer': self.optimizer_D.state_dict(),
+            'lr_scheduler': self.lr_scheduler_D.state_dict()
+        }
+            
         G_filename = 'G_{}.pth.tar'.format(self.current_iteration)
         torch.save(G_state, os.path.join(
             self.config.checkpoint_dir, G_filename))
@@ -151,8 +157,10 @@ class STGANAgent(object):
             self.current_epoch = int(self.config.checkpoint // self.data_loader.train_iterations)
             self.current_iteration = self.config.checkpoint
             self.optimizer_G.load_state_dict(G_checkpoint['optimizer'])
+            self.optimizer_D.load_state_dict(D_checkpoint['optimizer'])
             self.lr_scheduler_G.load_state_dict(G_checkpoint['lr_scheduler'])
-
+            self.lr_scheduler_D.load_state_dict(D_checkpoint['lr_scheduler'])
+        
     def create_interpolated_attr(self, c_org, selected_attrs=None,att_min=0, att_max=1, num_samples=9):
         """Generate target domain labels for debugging and testing: linearly sample attribute. Contains a list for each attr"""
         all_lists = []
@@ -530,6 +538,11 @@ class STGANAgent(object):
                     scalars['G/psnr'] = psnr
                     scalars['G/lr'] = self.lr_scheduler_G.get_last_lr()
                     scalars['D/lr'] = self.lr_scheduler_D.get_last_lr()
+
+                scalars['G/lr'] = self.lr_scheduler_G.get_last_lr()
+                scalars['D/lr'] = self.lr_scheduler_D.get_last_lr()
+                if  self.config.use_ld:
+                    scalars['LD/lr'] = self.lr_scheduler_LD.get_last_lr()
 
                 self.current_iteration += 1
 

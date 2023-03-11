@@ -174,7 +174,7 @@ class MaterialDataset(data.Dataset):
             return image, torch.FloatTensor(mat_attr), filename, mask,rgb
         
         else:
-            return image, torch.FloatTensor(mat_attr)
+            return image, torch.FloatTensor(mat_attr), rgb
 
     def __len__(self):
         return len(self.files)
