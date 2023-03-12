@@ -32,7 +32,6 @@ cudnn.benchmark = True
 import time
 from pytorch_msssim import ssim
 import moviepy.video.io.ImageSequenceClip
-
 N_SAMPLES_VIDEO = 1
 
 class STGANAgent(object):
@@ -239,7 +238,7 @@ class STGANAgent(object):
             idw_atts = torch.ones(1,len(self.config.attrs)) * 0.5
             print(self.config.video_dir)
             os.system('rm -rf %s/*' % self.config.video_dir)
-            self.config.add_bg = True
+            #self.config.add_bg = True
             c_trg_all = self.create_interpolated_attr(
                                                       idw_atts,
                                                       self.config.attrs, 
@@ -662,6 +661,28 @@ class STGANAgent(object):
                                          rgb.shape[2],device=self.device)], dim=0)
         return image
 
+    def compute_metrics(self, real_image, rec_image):
+
+        mse =self.img2mse(real_image,rec_image)
+        mae = self.img2mae(real_image,rec_image)
+        real_image = (real_image + 1) / 2 
+        rec_image = (rec_image + 1) / 2 
+        real_image = real_image.expand(1,4,256,256)
+        rec_image = rec_image.expand(1,4,256,256)
+        ssim_val = ssim( real_image, rec_image, data_range=1, size_average=False)
+
+        return mse, mae, ssim_val
+    
+    def prepare_inference(self, msg_format):
+        
+        self.load_checkpoint()
+        self.G.to(self.device)
+        tqdm_loader = tqdm(self.data_loader.test_loader, total=self.data_loader.test_iterations,
+                           desc=msg_format)
+        self.G.eval()
+
+        return tqdm_loader
+    
     def plot_metrics(self):
 
         psnr_file = open(os.path.join(self.config.metric_dir, 'psnr.txt'),'w')
@@ -669,88 +690,42 @@ class STGANAgent(object):
         mse_file = open(os.path.join(self.config.metric_dir, 'mse.txt'),'w')
         mae_file = open(os.path.join(self.config.metric_dir, 'mae.txt'),'w')
 
-        # TODO Add procesing loop
-        self.load_checkpoint()
-        self.G.to(self.device)
-        tqdm_loader = tqdm(self.data_loader.test_loader, total=self.data_loader.test_iterations,
-                           desc='Computing metrics at checkpoint {}'.format(self.config.checkpoint))
-        self.G.eval()
+        mse_file.write('filename, MSE\n')
+        mae_file.write('filename, MAE\n')     
+        ssim_file.write('filename, SSIM\n')  
+        psnr_file.write('filename, PSNR\n')
+
+        tqdm_loader = self.prepare_inference('[METRICS]: Computing at checkpoint {}'.format(self.config.checkpoint))
 
         with torch.no_grad():
 
-            for i, (x_real, c_org, filename,mask,rgb) in enumerate(tqdm_loader):
+            for n_batch, (x_real, c_org, filename) in enumerate(tqdm_loader):
                 
-                rgb = rgb.to(self.device) 
                 att_idx = 0
                 x_real = x_real.to(self.device)
                 ch_4 = x_real[:, 3:]
-                x_fake_list = []
+                x_real = x_real[:, :3]
+                x_rec = self.G(x_real, c_org.to(self.device))
 
-                for c_trg_sample in c_org:
-
-                    x_real = x_real[:, :3]
-                    x_fake = self.G(x_real, c_trg_sample.to(self.device))
-
-                    for n in range(0, x_real.shape[0]):                     
+                for n in range(0, x_real.shape[0]):                     
                                 
-                        if self.config.add_bg:
+                    rec_image = torch.cat([x_rec[n] , ch_4[n]], dim=0)
+                    real_image = torch.cat([x_real[n] , ch_4[n]], dim=0)
+                    mse, mae, ssim_val = self.compute_metrics(real_image.clone(), rec_image.clone())
+                    
+                    mse_file.write(filename[n] + ' ' + str(mse.item())+'\n')
+                    mae_file.write(filename[n] + ' ' + str(mae.item())+'\n')     
+                    ssim_file.write(filename[n] + ' ' + str(ssim_val.item() )+'\n')  
+                    psnr_file.write(filename[n] + ' ' + str(self.mse2psnr(mse).item())+'\n')
 
-                            figure = denorm(x_fake[n], self.device, self.config.add_bg)[0]
-                            inv_mask = torch.where(mask.to(self.device) == 1, 0,1)
-                            figure= figure * inv_mask
-                            aux_1 = torch.where(ch_4[n] <= 0.6,  torch.tensor(1, dtype=ch_4[n].dtype).to(self.device) ,torch.tensor(0, dtype=ch_4[n].dtype).to(self.device))
-                            aux_inv = torch.where(aux_1 == 0.,  torch.tensor(1, dtype=ch_4[n].dtype).to(self.device) ,torch.tensor(0, dtype=ch_4[n].dtype).to(self.device))
-                            bg = rgb[0] * aux_1
-                            figure = figure * aux_inv
-                            fig = figure + bg
-                            fig = torch.cat([fig, torch.ones(1,rgb[n].shape[1],
-                                                        rgb[n].shape[2],device=self.device)], dim=0)
-                        else:
-                                    
-                            if self.config.video:
-                                        
-                                fig = x_fake[n] * (ch_4[n] != 0)
-                                fig = torch.cat([fig, ch_4[n] != 0], dim=0)
-                                fig = denorm(fig, self.device,self.config.add_bg)[0]
-                            else:
-                                        
-                                fig = torch.cat([x_fake[n] , ch_4[n]], dim=0)
-                                fig = denorm(fig, self.device,self.config.add_bg)[0]
-                                
-                        x_fake_list[n].append(fig)
-                        x_concat = torch.cat(x_fake_list[n], dim=2)
+                    real_image = denorm(real_image, self.device,self.config.add_bg)[0]
+                    rec_image = denorm(rec_image, self.device,self.config.add_bg)[0]
 
-                if not self.config.video:
-                    name = '{}_{}_{}_[{},{}]_{}.png'.format(self.config.checkpoint,n, i + 1,self.config.att_min,self.config.att_max,self.config.attrs[att_idx])
-                else:
-                    name = '{}-{}.png'.format(filename[0],self.config.attrs[att_idx])
+                    name = 'Image_{}_{}.png'.format(n + x_real.shape[0] * n_batch,self.config.attrs[att_idx])
+                    result_path = os.path.join(self.config.metric_dir, name)
+                    image_pair = torch.cat([real_image, rec_image], dim=2)
+                    save_image(image_pair, result_path, nrow=1, padding=0)
 
-
-            for n in range(0, x_real.shape[0]):
-                if not self.config.video:
-                    name = '{}_{}_{}_[{},{}]_{}.png'.format(self.config.checkpoint,n, i + 1,self.config.att_min,self.config.att_max,self.config.attrs[att_idx])
-                else:
-                    name = '{}-{}.png'.format(filename[0],self.config.attrs[att_idx])
-                                    
-                real = x_fake_list[n][0]
-                rec = x_fake_list[n][1]
-                mse =self.img2mse(real,rec)
-                mae = self.img2mae(real,rec)
-                psnr_file.write(#name+' '+
-                                str(self.mse2psnr(mse).item())+'\n')
-                mse_file.write(#name+' '+
-                                                    str(mse.item())+'\n')
-                mae_file.write(#name+' '+
-                                                    str(mae.item())+'\n')               
-                real = (real + 1) / 2 
-                rec = (rec + 1) / 2 
-                real =real.expand(1,4,256,256)
-                rec =rec.expand(1,4,256,256)
-                ssim_file.write(#name+' '+
-                                                    str(ssim( real, rec, data_range=1, size_average=False).item() )+'\n')
-                result_path = os.path.join(
-                self.config.metric_dir, name)
-                x_fake_list[n][1] = denorm(x_fake_list[n][1], self.device,self.config.add_bg)[0]
      
         psnr_file.close()   
         ssim_file.close()
@@ -759,13 +734,8 @@ class STGANAgent(object):
 
     def edit_images(self, output_path, c_trg_all, video=False):
 
-        self.load_checkpoint()
-        self.G.to(self.device)
         editing_type = 'VIDEO' if video else 'IMAGE'
-        tqdm_loader = tqdm(self.data_loader.test_loader, total=self.data_loader.test_iterations,
-                           desc='[{} EDITING]: Checkpoint {}'.format(editing_type, self.config.checkpoint))
-        self.G.eval()
-
+        tqdm_loader = self.prepare_inference('[{} EDITING]: Checkpoint {}'.format(editing_type, self.config.checkpoint))
         with torch.no_grad():
 
             for n_batch, (x_real, mask,rgb) in enumerate(tqdm_loader):

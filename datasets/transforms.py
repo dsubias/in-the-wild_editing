@@ -11,7 +11,6 @@ from albumentations import functional as FA
 from utils.im_util import denorm
 from torchvision.utils import make_grid, save_image
 
-
 class Compose(object):
     def __init__(self, transforms):
         self.transforms = transforms
@@ -41,101 +40,62 @@ class Resize(object):
         self.size = (size,size) #TODO according to what is size
         self.interpolation = interpolation
 
-    def __call__(self, image, normals=[]): #TODO warning for mask -> nearest interpolation?
-        if normals !=[]:
-            image = F.resize(image, self.size, self.interpolation)
-            normals = F.resize(normals, self.size, self.interpolation)
-            return image, normals
-        else:
-            image = F.resize(image, self.size, self.interpolation)
-            return image
+    def __call__(self, image): #TODO warning for mask -> nearest interpolation?
+        image = F.resize(image, self.size, self.interpolation)
+        return image
 
 class ToTensor(object):
-    def __call__(self, image, normals=[]):
-        if normals != []:
-            image = F.to_tensor(image)
-            normals = F.to_tensor(normals)
-            return image, normals
-        else:
-            image = F.to_tensor(image)
-            return image
+    def __call__(self, image):
+        image = F.to_tensor(image)
+        return image
 
 class Normalize(object):
     def __init__(self, mean, std):
         self.mean = mean
         self.std = std
 
-    def __call__(self, image, normals=None):
-        if normals != None:
-            image = F.normalize(image, mean=self.mean, std=self.std)
-            normals = F.normalize(normals, mean=self.mean, std=self.std)
-            return image, normals
-        else: 
-            image = F.normalize(image, mean=self.mean, std=self.std)
-            return image
+    def __call__(self, image):
+        image = F.normalize(image, mean=self.mean, std=self.std)
+        return image
 
 class RandomHorizontalFlip(object):
     def __init__(self, flip_prob):
         self.flip_prob = flip_prob
 
-    def __call__(self, image, normals):
+    def __call__(self, image):
         if random.random() < self.flip_prob:
             image = F.hflip(image)
-            normals = F.hflip(normals) 
-            normals_red_channel = normals[:,:,0]
-            normals_red_channel = 255 - normals_red_channel
-            normals[:,:,0] = normals_red_channel
-        return image, normals
+        return image
 
 class RandomVerticalFlip(object):
     def __init__(self, flip_prob):
         self.flip_prob = flip_prob
 
-    def __call__(self, image, normals):
+    def __call__(self, image):
         if random.random() < self.flip_prob:
             image = F.vflip(image)
-            normals = F.vflip(normals)
-            normals_green_channel = normals[:,:,1]
-            normals_green_channel = 255 - normals_green_channel
-            normals[:,:,1] = normals_green_channel
-        return image, normals
+        return image
 
 class Random90DegRotClockWise(object):
     def __init__(self, flip_prob):
         self.flip_prob = flip_prob
 
-    def __call__(self, image, normals):
+    def __call__(self, image):
         if random.random() < self.flip_prob:
             angle = 90
             image =  F.rotate(image, angle, resample=False, expand=False, center=None)
-            normals =  F.rotate(normals, angle, resample=False, expand=False, center=None)
-
-            normals_red_channel = normals[:,:,0]
-            normals_green_channel = normals[:,:,1]
-
-            normals_red_channel = 255 - normals_red_channel
-            normals[:,:,0] = normals_green_channel
-            normals[:,:,1] = normals_red_channel
-        return image, normals
+            
+        return image
 
 class Random180DegRot(object):
     def __init__(self, flip_prob):
         self.flip_prob = flip_prob
 
-    def __call__(self, image, normals):
+    def __call__(self, image):
         if random.random() < self.flip_prob:
             angle = 180
             image =  F.rotate(image, angle, resample=False, expand=False, center=None)
-            normals =  F.rotate(normals, angle, resample=False, expand=False, center=None)
-
-            normals_red_channel = normals[:,:,0]
-            normals_green_channel = normals[:,:,1]
-
-            normals_red_channel = 255 - normals_red_channel
-            normals_green_channel = 255 - normals_green_channel
-            normals[:,:,0] = normals_red_channel
-            normals[:,:,1] = normals_green_channel
-        return image, normals
+        return image
 
 class Albumentations(object):
     def __init__(self, hue_limit, sat_limit, flip_prob):
@@ -143,14 +103,14 @@ class Albumentations(object):
         self.sat_limit = sat_limit
         self.flip_prob=flip_prob
 
-    def __call__(self, image, normals):
+    def __call__(self, image):
         if random.random() < self.flip_prob:
             
             hue_shift=random.uniform(-self.hue_limit, self.hue_limit)
             sat_shift=random.uniform(-self.sat_limit, self.sat_limit)
             image[:,:,:3] = FA.shift_hsv(image[:,:,:3], hue_shift=hue_shift,sat_shift=sat_shift, val_shift=0)
 
-        return image, normals
+        return image
 
 class Albumentations2(object):
     def __init__(self, hue_limit, sat_limit, flip_prob):
@@ -158,27 +118,25 @@ class Albumentations2(object):
         self.sat_limit = sat_limit
         self.flip_prob=flip_prob
 
-    def __call__(self, image, normals):
+    def __call__(self, image):
         if random.random() < self.flip_prob:
             
             mx_ex_int_array = mx.nd.array(image[:,:,:3] / 255.)
             aug = mx.ndarray.image.random_saturation(mx_ex_int_array[:,:,:3],0.,1.)
             aug = mx.ndarray.image.random_hue(aug,0.,1.)
             image[:,:,:3] = (aug.asnumpy() * 255).astype(np.uint8)
-        return image, normals
+        return image
 
 
 class RandomCrop(object):
     def __init__(self, size):
         self.size = size
 
-    def __call__(self, image, normals):
-        #image = pad_if_smaller(image, self.size)
-        #normals = pad_if_smaller(normals, self.size)
+    def __call__(self, image, ):
+
         crop_params = T.RandomCrop.get_params(image, (self.size, self.size))
         image = F.crop(image, *crop_params)
-        normals = F.crop(normals, *crop_params)
-        return image, normals
+        return image
 
 class RandomResize(object):
     def __init__(self, low, high, interpolation=Image.BILINEAR):
@@ -186,11 +144,10 @@ class RandomResize(object):
         self.high = high
         self.interpolation = interpolation
 
-    def __call__(self, image, normals): 
+    def __call__(self, image, ): 
         size = np.random.randint(self.low, self.high)
         image = F.resize(image, (size,size), self.interpolation)
-        normals = F.resize(normals, (size,size), self.interpolation)
-        return image, normals
+        return image
 
 class RandomRotation(object):
     def __init__(self, degrees, resample=False, expand=False, center=None, fill=None):
@@ -200,10 +157,9 @@ class RandomRotation(object):
         self.center = center
         self.fill = fill
 
-    def __call__(self, image, normals): 
+    def __call__(self, image): 
         angle = T.RandomRotation.get_params(self.degrees)
         image =  F.rotate(image, angle, self.resample, self.expand, self.center)
-        normals =  F.rotate(normals, angle, self.resample, self.expand, self.center ) 
-        #TODO change normals
-        return image, normals
+
+        return image
 

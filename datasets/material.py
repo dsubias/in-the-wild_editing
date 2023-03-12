@@ -9,6 +9,7 @@ import numpy as np
 import cv2
 from matplotlib import pyplot as plt
 from torchvision.utils import save_image
+from datasets.transforms import *
 
 def make_dataset(root, train_file, val_file, test_file, mode, selected_attrs):
 
@@ -78,21 +79,13 @@ def list2idxs(l):
 
     return l, idx2obj, obj2idx
 
-# extract the highlights from an image of a glossy mat
+def get_mask(image,image_rgb):
 
-
-def extract_highlights(image,image_rgb):
-    dset = __import__('datasets.transforms2', globals(), locals())
-    T = dset.transforms2
-    image = T.ToTensor()(T.Resize(256)(image))
-    image_rgb = T.ToTensor()(T.Resize(256)(image_rgb))
+    image = ToTensor()(Resize(256)(image))
+    image_rgb = ToTensor()(Resize(256)(image_rgb))
     mask = torch.where(image[3,:,:] <= 0.1, 1,0)
-    save_image(mask.float(),'mask.png')
-    save_image(image.float(),'img.png')
-    save_image(image_rgb.float(),'img_rgb.png')
-    back_ground = image[:3,:,:] * mask
 
-    return back_ground,mask, image_rgb
+    return mask, image_rgb
 
 
 class MaterialDataset(data.Dataset):
@@ -118,63 +111,55 @@ class MaterialDataset(data.Dataset):
 
         # OpenCV version
         # read image
-        image_rgb = cv2.cvtColor(cv2.imread(os.path.join(
-            self.root, "renderings", self.files[index]), 1), cv2.COLOR_BGR2RGB)
-        size = image_rgb.shape[0]
-        # read normals
-        normals_bgra = cv2.imread(os.path.join(
-            self.root, "normals", self.files[index][:-3]+"png"), -1)
-        if (type(normals_bgra) is np.ndarray):
-            # if the normals exist, resize them and trasnform to RGB (is BGR when reading)
-            if normals_bgra.shape[0] != size:
-                normals_bgra = cv2.resize(normals_bgra, (size, size))
-            normals = np.ndarray((size, size, 4), dtype=np.uint8)
-            cv2.mixChannels([normals_bgra], [normals],
-                            [0, 2, 1, 1, 2, 0, 3, 3])
+        if self.mode == 'training' or self.mode == 'plot_metrics': 
+
+            image_rgb = cv2.cvtColor(cv2.imread(os.path.join(self.root, "renderings", self.files[index]), 1), cv2.COLOR_BGR2RGB)
+            size = image_rgb.shape[0]
+            # read normals
+            normals_bgra = cv2.imread(os.path.join(self.root, "normals", self.files[index][:-3]+"png"), -1)
+            if (type(normals_bgra) is np.ndarray):
+
+                # if the normals exist, resize them and trasnform to RGB (is BGR when reading)
+                if normals_bgra.shape[0] != size:
+                    normals_bgra = cv2.resize(normals_bgra, (size, size))
+                normals = np.ndarray((size, size, 4), dtype=np.uint8)
+                cv2.mixChannels([normals_bgra], [normals],
+                                [0, 2, 1, 1, 2, 0, 3, 3])
+            else:
+
+                # otherwise, put the normals and a full mask
+                mask = np.ones((size, size, 1), np.uint8)*255
+                normals = np.ndarray((size, size, 4), dtype=np.uint8)
+                cv2.mixChannels([image_rgb, mask], [normals],
+                                [0, 0, 1, 1, 2, 2, 3, 3])
+            
+            image = np.ndarray(normals.shape, dtype=np.uint8)
+            cv2.mixChannels([image_rgb, normals], [image],
+                            [0, 0, 1, 1, 2, 2, 6, 3])
         else:
-            # otherwise, put the normals and a full mask
-            mask = np.ones((size, size, 1), np.uint8)*255
-            normals = np.ndarray((size, size, 4), dtype=np.uint8)
-            cv2.mixChannels([image_rgb, mask], [normals],
-                            [0, 0, 1, 1, 2, 2, 3, 3])
-        if self.mode == "test":
-            # slighlty erode mask so that the results are nicer
-            element = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-            normals[:, :, 3] = cv2.dilate(normals[:, :, 3], element)
-        # add mask to image
+
+            image = cv2.cvtColor(cv2.imread(os.path.join(self.root, "renderings", self.files[index]), cv2.IMREAD_UNCHANGED), cv2.COLOR_BGRA2RGBA)
+            image_rgb = cv2.cvtColor(cv2.imread(os.path.join(self.root, "renderings", self.files[index]), 1), cv2.COLOR_BGR2RGB)
+            mask, rgb = get_mask(image,image_rgb)
         
-        image = np.ndarray(normals.shape, dtype=np.uint8)
-        cv2.mixChannels([image_rgb, normals], [image],
-                        [0, 0, 1, 1, 2, 2, 6, 3])
-
-        #print(image)
-        #print(image_rgb)
-        if (self.use_illum):
-            #illum = cv2.imread(os.path.join(self.root, "illum", self.files[index]), -1)
-            #if True:
-            illum , mask, rgb = extract_highlights(image,image_rgb)
-
-
         if self.transform is not None:
-            image, normals = self.transform(image, normals)
+            image = self.transform(image)
 
-        # mask the normals
-        normals = normals*normals[3:]
         # mask the input image if asked
         if self.mask_input_bg:
             image = image*image[3:]
 
         if self.mode == 'edit_images' or self.mode == 'edit_video':
 
-            filename = self.files[index].split('/')[1][:-4]
             return image, mask, rgb
         
         elif self.mode == 'plot_metrics':
-
-            return image, torch.FloatTensor(mat_attr), filename, mask,rgb
+            
+            filename = self.files[index].split('/')[1][:-4]
+            return image, torch.FloatTensor(mat_attr), filename
         
         else:
-            return image, torch.FloatTensor(mat_attr), rgb
+            return image, torch.FloatTensor(mat_attr)
 
     def __len__(self):
         return len(self.files)
@@ -198,7 +183,7 @@ class MaterialDataLoader(object):
         train_trf, val_trf = self.setup_transforms()
 
         if mode == 'train':
-            print("loading data")
+            print("Loading data")
             val_set = MaterialDataset(
                 root, train_file, val_file, test_file, 'val', selected_attrs, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
             self.val_loader = data.DataLoader(
@@ -219,41 +204,33 @@ class MaterialDataLoader(object):
             self.test_iterations = int(math.ceil(len(test_set) / batch_size))
 
     def setup_transforms(self):
-        global T
-        dset = __import__('datasets.transforms2', globals(), locals())
-        T = dset.transforms2
+
         # basic transform to put at the right size
-        val_trf = T.Compose([
-            # T.CenterCrop(self.crop_size),
-            T.Resize(self.image_size),
-            T.ToTensor(),
-            T.Normalize(mean=(0.5, 0.5, 0.5, 0), std=(0.5, 0.5, 0.5, 1))
+        val_trf = Compose([
+            Resize(self.image_size),
+            ToTensor(),
+            Normalize(mean=(0.5, 0.5, 0.5, 0), std=(0.5, 0.5, 0.5, 1))
         ])
-        # training transform : data augmentation
-        #if self.image_size != 512:
+
         high_resolution = 512
         if self.data_augmentation:
             
             train_trf = T.Compose([
-                T.Resize(high_resolution),  # suppose the dataset is of size 256
-                T.RandomHorizontalFlip(0.5),
-                T.RandomVerticalFlip(0.5),
-                T.Random180DegRot(0.5),
-                T.Random90DegRotClockWise(0.5),
-                T.Albumentations(100, 100, 0.5),  # change in color
-                T.RandomCrop(size=self.crop_size),
-                T.RandomResize(low=high_resolution,
+                Resize(high_resolution),  # suppose the dataset is of size 256
+                RandomHorizontalFlip(0.5),
+                RandomVerticalFlip(0.5),
+                Random180DegRot(0.5),
+                Random90DegRotClockWise(0.5),
+                Albumentations(100, 100, 0.5),  # change in color
+                RandomCrop(size=self.crop_size),
+                RandomResize(low=high_resolution,
                                high=int(high_resolution*1.1718)),
-                T.CenterCrop(high_resolution),
+                CenterCrop(high_resolution),
                 val_trf,
             ])
         else:
-            train_trf = T.Compose([
-                T.Resize(high_resolution),
+            train_trf = Compose([
                 val_trf,
             ])
-        val_trf = T.Compose([
-            T.Resize(high_resolution),
-            val_trf,
-        ])
+
         return train_trf, val_trf

@@ -84,7 +84,7 @@ def process_config(yaml_file):
         'experiments', config.exp_name, 'results/histograms')
         if not os.path.exists(config.histogram_dir):
                 os.makedirs(config.histogram_dir)
-    if config.mode == 'test' and config.plot_metrics:
+    if config.mode == 'plot_metrics':
         config.metric_dir = os.path.join(config.out_root,
         'experiments', config.exp_name, 'results/metrics')
         if not os.path.exists(config.metric_dir):
