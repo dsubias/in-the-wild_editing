@@ -2,7 +2,6 @@ import os
 import time
 import logging
 
-
 def timeit(f):
     """ Decorator to time Any Function """
 

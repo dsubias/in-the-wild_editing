@@ -15,25 +15,20 @@ class Compose(object):
     def __init__(self, transforms):
         self.transforms = transforms
 
-    def __call__(self, image, normals=[]):
+    def __call__(self, image):
         for t in self.transforms:
-            if normals != []:
-                image, normals = t(image, normals)
-            else:
-                image = t(image)
-        if normals != []:
-            return image, normals
-        else:
-            return image
+            image = t(image)
+
+        return image
         
 class CenterCrop(object):
     def __init__(self, size):
         self.size = size
 
-    def __call__(self, image, normals):
+    def __call__(self, image):
+        
         image = F.center_crop(image, self.size)
-        normals = F.center_crop(normals, self.size)
-        return image, normals
+        return image
 
 class Resize(object): 
     def __init__(self, size, interpolation=Image.BILINEAR):

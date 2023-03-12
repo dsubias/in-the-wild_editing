@@ -22,7 +22,7 @@ def make_dataset(root, train_file, val_file, test_file, mode, selected_attrs):
         lines = file_lines[1:]
         print('Train Samples:', len(lines))
 
-    if mode == 'val':  # put in first half a batch of test images, half of training images
+    elif mode == 'val':  # put in first half a batch of test images, half of training images
         
         file_lines = [line.rstrip() for line in open(os.path.join(
                       root,  val_file), 'r')] 
@@ -89,29 +89,25 @@ def get_mask(image,image_rgb):
 
 
 class MaterialDataset(data.Dataset):
-    def __init__(self, root, train_file, val_file, test_file, mode, selected_attrs, disentangled=False, transform=None, mask_input_bg=True, use_illum=False):
+    def __init__(self, root, train_file, val_file, test_file, mode, selected_attrs, transform=None, mask_input_bg=True, use_illum=False):
         items = make_dataset(root, train_file, val_file, test_file, mode, selected_attrs)
 
         self.files = items['files']
         self.mat_attrs = items['mat_attrs']
         self.root = root
         self.mode = mode
-        self.disentangled = disentangled
         self.transform = transform
         self.mask_input_bg = mask_input_bg
         self.use_illum = use_illum
 
     def __getitem__(self, index_and_mode):
-        if self.disentangled:
-            index, sampling_mode = index_and_mode
-        else:
-            index = index_and_mode
-
+        
+        index = index_and_mode
         mat_attr = self.mat_attrs[index]
 
         # OpenCV version
         # read image
-        if self.mode == 'training' or self.mode == 'plot_metrics': 
+        if self.mode in ['train', 'plot_metrics', 'val' ]: 
 
             image_rgb = cv2.cvtColor(cv2.imread(os.path.join(self.root, "renderings", self.files[index]), 1), cv2.COLOR_BGR2RGB)
             size = image_rgb.shape[0]
@@ -180,10 +176,11 @@ class MaterialDataLoader(object):
         if mode != 'train':
             use_illum=True
             self.data_augmentation = False
+
         train_trf, val_trf = self.setup_transforms()
 
         if mode == 'train':
-            print("Loading data")
+            
             val_set = MaterialDataset(
                 root, train_file, val_file, test_file, 'val', selected_attrs, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
             self.val_loader = data.DataLoader(

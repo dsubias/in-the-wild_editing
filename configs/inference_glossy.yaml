@@ -1,13 +1,13 @@
 # meta
-exp_name: 256_median_new_glossy_final
-mode: plot_metrics # train, edit_images, edit_video or plot_metrics
+exp_name: debug #256_median_new_glossy_final
+mode: train # train, edit_images, edit_video or plot_metrics
 cuda: False
 ngpu: 1
 gpus: '1'
 
 # --- Editing ---
 output_name: eg_bg
-checkpoint: 54000 
+checkpoint: ~ #54000 
 add_bg: False
 test_file: attributes_dataset_test_full_new_illum.txt
 
@@ -62,8 +62,6 @@ lambda_2: 100 # att generator (original value = 10)
 lambda_3: 1000 # reconstruction generator (original value = 100)
 
 # attributes
-att_activation: sigmoid # tanh, sigmoid or 
-att_loss: l1 # l1, binary_cross_entropy or cross_entropy
 attrs: [ glossy ]
 uniform: True
 default_att: 0.5

@@ -37,32 +37,23 @@ N_SAMPLES_VIDEO = 1
 class STGANAgent(object):
 
     def __init__(self, config):
-        assert config.att_loss in ['l1', 'cross_entropy','binary_cross_entropy']
-        assert config.att_activation in ['','tanh','sigmoid']
+        
         self.config = config
         self.logger = logging.getLogger("STGAN")
         self.logger.info("Creating STGAN architecture...")
-
-        # Just one sample whne editing video or compute metrics
-        if self.config.mode == 'edit_video' or self.config.mode == 'plot_metrics':
-            self.config.att_max = 1
-            self.config.att_min = self.config.att_max
-            self.config.num_samples =  1
 
         self.G = Generator(len(self.config.attrs), self.config.g_conv_dim, self.config.g_layers,
                            self.config.shortcut_layers, use_stu=self.config.use_stu, one_more_conv=self.config.one_more_conv,deconv= self.config.deconv)
         if self.config.use_d:
             self.D = Discriminator(self.config.image_size, len(
-            self.config.attrs), self.config.d_conv_dim, self.config.d_fc_dim, self.config.d_layers,self.config.att_activation)
-
-
+            self.config.attrs), self.config.d_conv_dim, self.config.d_fc_dim, self.config.d_layers)
 
         if self.config.mode == 'plot_metrics':
             G_total_params = sum(p.numel() for p in self.G.parameters() if p.requires_grad)
             D_total_params = sum(p.numel() for p in self.D.parameters() if p.requires_grad)
-            print('Number of parameters of G', G_total_params)
-            print('Number of parameters of D',D_total_params)
-            print('Total parameters of the framework (G+D)',G_total_params+D_total_params)
+            print('Number of parameters of G:', G_total_params)
+            print('Number of parameters of D:',D_total_params)
+            print('Total parameters of the framework (G+D):',G_total_params+D_total_params)
 
 
         self.data_loader = globals()['{}_loader'.format(self.config.dataset)](
@@ -72,7 +63,9 @@ class STGANAgent(object):
         self.current_iteration = 0
         self.current_epoch = 0
         self.cuda = torch.cuda.is_available() & self.config.cuda
+
         assert len (self.config.gpus.split(',')) == self.config.ngpu
+
         if self.cuda:
             self.device = torch.device("cuda:"+self.config.gpus)
             self.logger.info("Operation will be on *****GPU-CUDA***** ")
@@ -184,14 +177,6 @@ class STGANAgent(object):
     def mse2psnr(self, x):
         return -10. * torch.log(x) / torch.log(torch.Tensor([10.]).to(self.device))
     
-    def loss_cross_entropy(self,pred, soft_targets):
-        logsoftmax = nn.LogSoftmax()
-        return torch.mean(torch.sum(- soft_targets * logsoftmax(pred), 1))
-
-    def classification_loss(self, logit, target):
-        """Compute binary cross entropy loss."""
-        return F.binary_cross_entropy(logit, target)
-
     def regression_loss(self, logit, target):
         """Compute norm 1 loss."""
         return F.l1_loss(logit,target)
@@ -409,15 +394,7 @@ class STGANAgent(object):
                         # compute loss with real images
                         out_src, out_cls = self.D(x_real)
                         d_loss_real = - torch.mean(out_src)
-                        if self.config.att_loss == 'cross_entropy':
-                            print('F')
-                            d_loss_cls = self.loss_cross_entropy(out_cls,label_org)
-                        elif self.config.att_loss == 'binary_cross_entropy':
-                            print('FF')
-                            d_loss_cls = self.classification_loss(out_cls, label_org)
-                        elif self.config.att_loss == 'l1':
-                            d_loss_cls = self.regression_loss(out_cls, label_org) 
-
+                        d_loss_cls = self.regression_loss(out_cls, label_org) 
 
                         # generate target domain labels randomly or from the original data
                         if self.config.uniform:
@@ -441,9 +418,7 @@ class STGANAgent(object):
 
                         # compute loss for gradient penalty
                         alpha = torch.rand(x_real.size(0), 1, 1, 1).to(self.device)
-
                         x_hat = (alpha * x_real.data + (1 - alpha)* x_fake.data).requires_grad_(True)
-
                         out_src, _ = self.D(x_hat)
                         d_loss_gp = self.gradient_penalty(out_src, x_hat)
 
@@ -496,18 +471,7 @@ class STGANAgent(object):
                 if self.config.use_d:
                     out_src, out_cls = self.D(x_fake)
                     g_loss_adv = - torch.mean(out_src)
-
-                    if self.config.att_loss == 'cross_entropy':
-                        
-                        g_loss_cls = self.loss_cross_entropy(out_cls, label_trg)
-
-                    elif self.config.att_loss == 'binary_cross_entropy':
-                        
-                        g_loss_cls = self.classification_loss(out_cls, label_trg)
-
-                    elif self.config.att_loss == 'l1':
-                        
-                        g_loss_cls = self.regression_loss(out_cls, label_trg) 
+                    g_loss_cls = self.regression_loss(out_cls, label_trg) 
 
                 # target-to-original domain
                 x_reconst = self.G(x_real, c_org)
@@ -540,9 +504,6 @@ class STGANAgent(object):
 
                 scalars['G/lr'] = self.lr_scheduler_G.get_last_lr()
                 scalars['D/lr'] = self.lr_scheduler_D.get_last_lr()
-                if  self.config.use_ld:
-                    scalars['LD/lr'] = self.lr_scheduler_LD.get_last_lr()
-
                 self.current_iteration += 1
 
                 # =================================================================================== #
@@ -792,7 +753,7 @@ class STGANAgent(object):
 
 
     def finalize(self):
+
         print('Please wait while finalizing the operation.. Thank you')
-        self.writer.export_scalars_to_json(os.path.join(
-            self.config.summary_dir, 'all_scalars.json'))
+        self.writer.export_scalars_to_json(os.path.join(self.config.summary_dir, 'all_scalars.json'))
         self.writer.close()

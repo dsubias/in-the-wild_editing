@@ -224,7 +224,7 @@ class Generator(nn.Module):
         return out
 
 class Discriminator(nn.Module):
-    def __init__(self, image_size=128, attr_dim=10, conv_dim=64, fc_dim=1024, n_layers=5,att_activation=None):
+    def __init__(self, image_size=128, attr_dim=10, conv_dim=64, fc_dim=1024, n_layers=5):
         super(Discriminator, self).__init__()
         layers = []
         in_channels = 3
@@ -253,12 +253,7 @@ class Discriminator(nn.Module):
             nn.Linear(fc_dim, attr_dim),
         )
 
-        if att_activation == 'tanh':
-            print('tanh')
-            self.fc_att.add_module('Tanh',nn.Tanh())
-        elif att_activation == 'sigmoid':
-            print('sigmoid')
-            self.fc_att.add_module('Sigmoid',nn.Sigmoid())
+        self.fc_att.add_module('Sigmoid',nn.Sigmoid())
 
     def forward(self, x):
 
