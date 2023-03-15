@@ -18,14 +18,22 @@ In **Eurographics 2023** (Oral Presentation)
 
 ## TL;DR quickstart
 ```
+# Clone repository and enter in the folder
 git clone git@github.com:dsubias/FaderNetworks-Materials.git
 cd itw_editing
+
+# Download pretrained models
 bash download_models.sh
+
+# Create a python environment
 python -m venv itw_editing
 pip install -r requirements.txt
+
+# Create example image
 python resize.py
 python add_alpha.py
-bash download_example_data.sh
+
+# Run the editing framework
 test_network.py test_images/mikey.png 1.0 glossy test_glossy_1.png
 ```
 
