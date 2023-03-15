@@ -6,10 +6,10 @@ ngpu: 1
 gpus: '1'
 
 # --- Editing ---
-output_name: eg_bg
+output_name: real_new_test_set
 checkpoint: 54000 
 add_bg: False
-test_file: attributes_dataset_test_full_new_illum.txt
+test_file: real_nuevo.txt
 
 # Image options
 att_max: 1
@@ -29,8 +29,6 @@ crop_size: 480
 image_size: 256
 data_augmentation: True
 mask_input_bg: True
-histogram: True
-histogram_color_type: hsv
 
 # model
 g_conv_dim: 32

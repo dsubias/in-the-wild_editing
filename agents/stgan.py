@@ -1,8 +1,4 @@
 from distutils.command.config import config
-from importlib.util import set_loader
-from mimetypes import init
-from operator import imatmul
-from posixpath import split
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -51,13 +47,12 @@ class STGANAgent(object):
         if self.config.mode == 'plot_metrics':
             G_total_params = sum(p.numel() for p in self.G.parameters() if p.requires_grad)
             D_total_params = sum(p.numel() for p in self.D.parameters() if p.requires_grad)
-            print('Number of parameters of G:', G_total_params)
-            print('Number of parameters of D:',D_total_params)
-            print('Total parameters of the framework (G+D):',G_total_params+D_total_params)
-
+            self.logger.info('Number of parameters of G:', G_total_params)
+            self.logger.info('Number of parameters of D:',D_total_params)
+            self.logger.info('Total parameters of the framework (G+D):',G_total_params+D_total_params)
 
         self.data_loader = globals()['{}_loader'.format(self.config.dataset)](
-            self.config.data_root, self.config.train_file, self.config.val_file, self.config.test_file, self.config.mode, self.config.attrs,
+            self.logger, self.config.data_root, self.config.train_file, self.config.val_file, self.config.test_file, self.config.mode, self.config.attrs,
             self.config.crop_size, self.config.image_size, self.config.batch_size, self.config.data_augmentation, mask_input_bg=config.mask_input_bg)
 
         self.current_iteration = 0
@@ -105,7 +100,8 @@ class STGANAgent(object):
 
     def make_video(self):
 
-        fps=25
+        """Compilate edited frames and makes a video."""
+        fps = 25
         imgs = os.listdir(self.config.video_dir)
         imgs.sort()
         
@@ -117,6 +113,7 @@ class STGANAgent(object):
         clip.write_videofile(os.path.join(self.config.video_dir,'video.mp4'))
                                 
     def load_checkpoint(self):
+
         if self.config.checkpoint is None:
             self.G.to(self.device)
 
@@ -154,6 +151,7 @@ class STGANAgent(object):
             self.lr_scheduler_D.load_state_dict(D_checkpoint['lr_scheduler'])
         
     def create_interpolated_attr(self, c_org, selected_attrs=None,att_min=0, att_max=1, num_samples=9):
+        
         """Generate target domain labels for debugging and testing: linearly sample attribute. Contains a list for each attr"""
         all_lists = []
         for i in range(len(selected_attrs)):
@@ -168,20 +166,27 @@ class STGANAgent(object):
         return all_lists
 
     def img2mse(self, x, y):
+
+        """Compute Mean Square Error."""
         return torch.mean((x - y) ** 2)
 
     def img2mae(self, x, y):
-        mae = nn.L1Loss()
-        return mae(x, y)
 
-    def mse2psnr(self, x):
-        return -10. * torch.log(x) / torch.log(torch.Tensor([10.]).to(self.device))
+        """Compute Mean Absolute Error."""
+        return self.l1_loss(x, y)
+
+    def mse2psnr(self, mse):
+
+        """Compute PSNR."""
+        return -10. * torch.log(mse) / torch.log(torch.Tensor([10.]).to(self.device))
     
-    def regression_loss(self, logit, target):
+    def l1_loss(self, logit, target):
+
         """Compute norm 1 loss."""
         return F.l1_loss(logit,target)
 
     def gradient_penalty(self, y, x):
+
         """Compute gradient penalty: (L2_norm(dy/dx) - 1)**2."""
         weight = torch.ones(y.size()).to(self.device)
         dydx = torch.autograd.grad(outputs=y,
@@ -196,6 +201,7 @@ class STGANAgent(object):
         return torch.mean((dydx_l2norm-1)**2)
 
     def run(self):
+
         assert self.config.mode in ['train', 'edit_images','edit_video', 'plot_metrics']
         # try:
         if self.config.mode == 'train':
@@ -204,7 +210,8 @@ class STGANAgent(object):
 
         elif self.config.mode == 'edit_images':
             
-            # When editing in the wild, we asume the original value is 0.5
+            # When editing in the wild, we asume the original value
+            # for the attribute is 0.5
             idw_atts = torch.ones(1,len(self.config.attrs)) * 0.5
             c_trg_all = self.create_interpolated_attr(
                                                       idw_atts,
@@ -218,7 +225,8 @@ class STGANAgent(object):
 
         elif self.config.mode == 'edit_video':
             
-            # When editing in the wild, we asume the original value is 0.5
+            # When editing in the wild, we asume the original value 
+            # for the attribute is 0.5
             # Only one editing per frame
             idw_atts = torch.ones(1,len(self.config.attrs)) * 0.5
             print(self.config.video_dir)
@@ -284,27 +292,6 @@ class STGANAgent(object):
         all_sample_list = self.create_interpolated_attr(
             c_org_sample, self.config.attrs, self.config.att_min,self.config.att_max, self.config.num_samples)
 
-        if self.config.histogram:
-            nb_bins = 256
-            att_bins = 300
-            hue_bins = 360
-            sat_bins= value_bins = 256
-            count_r = np.zeros(nb_bins, dtype=np.float128)
-            count_g = np.zeros(nb_bins, dtype=np.float128)
-            count_b = np.zeros(nb_bins, dtype=np.float128)
-            count_att = np.zeros((len(self.config.attrs),att_bins), dtype=np.float128)
-            count_att_target = np.zeros((len(self.config.attrs),att_bins), dtype=np.float128)
-            hue_range = np.linspace(0,hue_bins-1,hue_bins)
-            sat_range = np.linspace(0,1,sat_bins)
-            value_range = np.linspace(0,255,value_bins)
-            colors = cm.hsv( hue_range / float(hue_bins-1))
-            colors_values  = cm.gray( value_range / float(value_bins-1))
-            count_h = np.zeros(hue_bins, dtype=np.float128)
-            count_s = np.zeros(sat_bins, dtype=np.float128)
-            count_v = np.zeros(value_bins, dtype=np.float128)
-            hist_att = [None] * len(self.config.attrs)
-            hist_att_target = [None] * len(self.config.attrs)
-
         if self.config.checkpoint:
             init_iteration = int(self.config.checkpoint % self.data_loader.train_iterations)
         else:
@@ -320,7 +307,7 @@ class STGANAgent(object):
 
         for epoch in range(self.current_epoch, self.config.max_epochs):
             
-            for batch in trange(init_iteration, self.data_loader.train_iterations, desc='Epoch {}'.format(epoch),leave=(epoch==self.config.max_epochs-1)):
+            for batch_id in trange(init_iteration, self.data_loader.train_iterations, desc='Epoch {}'.format(epoch),leave=(epoch==self.config.max_epochs-1)):
                 
                 # =================================================================================== #
                 #                             0. Preprocess input data                                #
@@ -335,47 +322,6 @@ class STGANAgent(object):
 
                 x_real = x_real.to(self.device)         # input images
                 c_org = label_org.clone()
-                # data color histogram
-                if self.config.histogram:
-                    de_norm = denorm(x_real, self.device,self.config.add_bg)
-                    channels = de_norm.view(4,-1)
-                    figure = channels[3] > 0
-                    if self.config.histogram_color_type == 'rgb':
-                        
-                        red = (channels[0,figure] *  255).cpu().numpy().astype(int)
-                        green = (channels[1,figure] *  255).cpu().numpy().astype(int)
-                        blue = (channels[2,figure] *  255).cpu().numpy().astype(int)
-
-                        hist_r = np.histogram(red, bins=nb_bins, range=[0, 255])
-                        hist_g = np.histogram(green, bins=nb_bins, range=[0, 255])
-                        hist_b = np.histogram(blue, bins=nb_bins, range=[0, 255])
-                        
-                        count_r += hist_r[0]
-                        count_g += hist_g[0]
-                        count_b += hist_b[0]
-                    elif self.config.histogram_color_type == 'hsv':
-                        de_norm = de_norm.cpu().numpy()
-                        masks = de_norm[:,3] > 0
-                        masks = masks.astype(np.uint8) * 255
-                        de_norm = de_norm[:,:3].transpose(0,2,3,1)
-                        de_norm = de_norm  * 255
-
-                        for i in range(de_norm.shape[0]):
-                            
-                            img = cv2.cvtColor(de_norm[i], cv2.COLOR_RGB2HSV)
-                            h, s, v = img[:,:,0], img[:,:,1], img[:,:,2]
-                            hist_h = cv2.calcHist([h],[0],masks[i],[hue_bins],[0,359])
-                            hist_h = hist_h.reshape((360,))
-                            
-                            hist_s = cv2.calcHist([s],[0],masks[i],[sat_bins],[0,1])
-                            hist_s = hist_s.reshape((sat_bins,))
-
-                            hist_v = cv2.calcHist([v],[0],masks[i],[value_bins],[0,255])
-                            hist_v = hist_v.reshape((value_bins,))
-
-                            count_h += hist_h
-                            count_s += hist_s
-                            count_v += hist_v
 
                 x_real = x_real[:, :3]
                 c_org = c_org.to(self.device)           # original domain labels
@@ -394,7 +340,7 @@ class STGANAgent(object):
                         # compute loss with real images
                         out_src, out_cls = self.D(x_real)
                         d_loss_real = - torch.mean(out_src)
-                        d_loss_cls = self.regression_loss(out_cls, label_org) 
+                        d_loss_cls = self.l1_loss(out_cls, label_org) 
 
                         # generate target domain labels randomly or from the original data
                         if self.config.uniform:
@@ -437,17 +383,6 @@ class STGANAgent(object):
                         scalars['D/loss_fake'] = d_loss_fake.item()
                         scalars['D/loss_gp'] = d_loss_gp.item()
                 
-                if self.config.histogram:
-
-                    for i in range(0,len(self.config.attrs)):
-
-                        range_= [0, 1]
-                        hist_att[i] = np.histogram(c_org[i].cpu().numpy(), bins=att_bins, range=range_)
-                        hist_att_target[i] = np.histogram(label_trg[i].cpu().numpy(), bins=att_bins, range=range_)
-                        range_= [-1, 1]
-                        count_att[i] += hist_att[i][0]                   
-                        count_att_target[i] += hist_att_target[i][0]
-
                 # =================================================================================== #
                 #                               2. Train the generator                                #
                 # =================================================================================== #
@@ -471,7 +406,7 @@ class STGANAgent(object):
                 if self.config.use_d:
                     out_src, out_cls = self.D(x_fake)
                     g_loss_adv = - torch.mean(out_src)
-                    g_loss_cls = self.regression_loss(out_cls, label_trg) 
+                    g_loss_cls = self.l1_loss(out_cls, label_trg) 
 
                 # target-to-original domain
                 x_reconst = self.G(x_real, c_org)
@@ -519,49 +454,7 @@ class STGANAgent(object):
                         self.writer.add_scalar(tag, value, self.current_iteration)
 
                 if  self.current_iteration % self.config.sample_step == 0:
-                    
-                    if self.config.histogram:
-                        result_path = os.path.join(self.config.histogram_dir, 'hist_color_{}.png'.format( self.current_iteration))
-                        if self.config.histogram_color_type == 'rgb':
-                            fig, ax = plt.subplots(3,1,figsize=(8,12),sharex=True)
-                            ax[0].set_title('Red')
-                            ax[0].bar(hist_r[1][:-1], count_r, color='r', alpha=0.5)
-                            ax[1].set_title('Blue')
-                            ax[1].bar(hist_g[1][:-1], count_g, color='g', alpha=0.5)
-                            ax[2].set_title('Green')
-                            ax[2].bar(hist_b[1][:-1], count_b, color='b', alpha=0.5)
-                            plt.savefig(result_path)
-
-                        elif self.config.histogram_color_type == 'hsv':
-                            fig, ax = plt.subplots(3,1,figsize=(8,12))
-                            ax[0].set_title('HUE')
-                            ax[0].bar(hue_range,count_h , color = colors)
-                            ax[0].set_facecolor("grey")
-                            ax[1].set_title('SATURATION')
-                            ax[1].bar(sat_range,count_s,width=1 / sat_bins)
-                            ax[2].set_title('VALUE')
-                            ax[2].bar(value_range,count_v,color = colors_values)
-                            ax[2].set_facecolor('coral')
-                            plt.savefig(result_path)
-                           
-                        num_att_hist = 2
-                            
-                        for i in range(0,len(self.config.attrs)):
-                            
-                            fig, ax = plt.subplots(num_att_hist,1,figsize=(8,10))
-                            bins = hist_att[i][1]
-                            ax[0].set_title('$att_s$')
-                            width_source = 1 / att_bins
-
-                            ax[0].bar(bins[:-1], count_att[i], color='b', alpha=0.5,width=width_source)
-                            bins = hist_att_target[i][1]
-                            ax[1].set_title('$att_t$')
-                            ax[1].bar(bins[:-1], count_att_target[i], color='b', alpha=0.5,width=width_source)
-
-                            result_path = os.path.join(self.config.histogram_dir, 'hist_att_{}_{}.png'.format(self.config.attrs[i],self.current_iteration))
-                            plt.savefig(result_path)
-                            plt.close('all')
-                    
+                        
                     self.G.eval()
 
                     with torch.no_grad():

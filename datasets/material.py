@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 from torchvision.utils import save_image
 from datasets.transforms import *
 
-def make_dataset(root, train_file, val_file, test_file, mode, selected_attrs):
+def make_dataset(logger, root, train_file, val_file, test_file, mode, selected_attrs):
 
     assert mode in ['train', 'val', 'edit_images', 'edit_video', 'plot_metrics']
 
@@ -20,23 +20,23 @@ def make_dataset(root, train_file, val_file, test_file, mode, selected_attrs):
         root,  train_file), 'r')]
     
         lines = file_lines[1:]
-        print('Train Samples:', len(lines))
+        logger.info('Train Samples: ' + str(len(lines)))
 
     elif mode == 'val':  # put in first half a batch of test images, half of training images
         
         file_lines = [line.rstrip() for line in open(os.path.join(
                       root,  val_file), 'r')] 
         lines = file_lines[1:]
-        print('Validation Samples:', len(lines))
+        logger.info('Validation Samples: ' + str(len(lines)))
 
     else:
         file_lines = [line.rstrip() for line in open(os.path.join(
                       root, test_file), 'r')]
         lines = file_lines[1:]
-        print('Test Samples', len(lines))
+        logger.info('Test Samples: ' + str(len(lines)))
 
     all_attr_names = file_lines[0].split()
-    print('Mode: ', mode, ', Attributes in the dataset: ', all_attr_names)
+    logger.info('Attributes in the dataset: ' + str(all_attr_names))
     attr2idx = {}
     idx2attr = {}
 
@@ -89,8 +89,9 @@ def get_mask(image,image_rgb):
 
 
 class MaterialDataset(data.Dataset):
-    def __init__(self, root, train_file, val_file, test_file, mode, selected_attrs, transform=None, mask_input_bg=True, use_illum=False):
-        items = make_dataset(root, train_file, val_file, test_file, mode, selected_attrs)
+
+    def __init__(self, root, train_file, val_file, test_file, mode, selected_attrs, logger, transform=None, mask_input_bg=True, use_illum=False):
+        items = make_dataset(logger, root, train_file, val_file, test_file, mode, selected_attrs)
 
         self.files = items['files']
         self.mat_attrs = items['mat_attrs']
@@ -163,7 +164,7 @@ class MaterialDataset(data.Dataset):
 
 # the main dataloader
 class MaterialDataLoader(object):
-    def __init__(self, root, train_file, val_file, test_file, mode, selected_attrs, crop_size=None, image_size=128, batch_size=16, data_augmentation=True, mask_input_bg=True, use_illum=False):
+    def __init__(self, logger, root, train_file, val_file, test_file, mode, selected_attrs, crop_size=None, image_size=128, batch_size=16, data_augmentation=True, mask_input_bg=True, use_illum=False):
         if mode not in ['train', 'val', 'edit_images', 'edit_video', 'plot_metrics']:
             return
 
@@ -182,20 +183,20 @@ class MaterialDataLoader(object):
         if mode == 'train':
             
             val_set = MaterialDataset(
-                root, train_file, val_file, test_file, 'val', selected_attrs, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
+                root, train_file, val_file, test_file, 'val', selected_attrs, logger, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
             self.val_loader = data.DataLoader(
                 val_set, batch_size=batch_size, shuffle=False, num_workers=4)
             self.val_iterations = int(math.ceil(len(val_set) / batch_size))
 
             train_set = MaterialDataset(
-                root, train_file, val_file, test_file, 'train', selected_attrs, transform=train_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
+                root, train_file, val_file, test_file, 'train', selected_attrs, logger, transform=train_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
             self.train_loader = data.DataLoader(
                 train_set, batch_size=batch_size, shuffle=True, num_workers=4)
             self.train_iterations = int(math.ceil(len(train_set) / batch_size))
         else:
             batch_size = 1
             test_set = MaterialDataset(
-                root, train_file, val_file, test_file,  mode, selected_attrs, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
+                root, train_file, val_file, test_file,  mode, selected_attrs, logger, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
             self.test_loader = data.DataLoader(
                 test_set, batch_size=batch_size, shuffle=False, num_workers=1)
             self.test_iterations = int(math.ceil(len(test_set) / batch_size))

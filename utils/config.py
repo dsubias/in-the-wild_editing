@@ -79,11 +79,7 @@ def process_config(yaml_file):
         dir_list.append(config.video_dir)
 
     create_dirs(dir_list)
-    if config.histogram:
-        config.histogram_dir = os.path.join(config.out_root,
-        'experiments', config.exp_name, 'results/histograms')
-        if not os.path.exists(config.histogram_dir):
-                os.makedirs(config.histogram_dir)
+    
     if config.mode == 'plot_metrics':
         config.metric_dir = os.path.join(config.out_root,
         'experiments', config.exp_name, 'results/metrics')

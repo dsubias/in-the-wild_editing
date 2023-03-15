@@ -17,8 +17,6 @@ crop_size: 480
 image_size: 256
 data_augmentation: True
 mask_input_bg: True
-histogram: True
-histogram_color_type: hsv
 add_bg: False
 video: False
 
