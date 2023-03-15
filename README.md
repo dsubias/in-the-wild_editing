@@ -1,6 +1,6 @@
 # In-the-wild Material Appearance Editing using Perceptual Attributes 
 
-### [Project Page](https://arxiv.org/pdf/2302.03619.pdf) | [Paper](https://arxiv.org/pdf/2302.03619.pdf) | [Data](-)
+### [Project Page](https://dsubias.github.io/publication/in-the-wild_editing/) | [Paper](https://arxiv.org/pdf/2302.03619.pdf) | [Data](-)
 
 An official **PyTorch**  implementation of [**In-the-wild Material Appearance Editing using Perceptual Attributes**](). 
 
