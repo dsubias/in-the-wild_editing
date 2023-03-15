@@ -18,6 +18,7 @@ In **Eurographics 2023** (Oral Presentation)
 
 ## TL;DR quickstart
 ```
+git clone git@github.com:dsubias/FaderNetworks-Materials.git
 cd itw_editing
 bash download_models.sh
 python -m venv itw_editing
