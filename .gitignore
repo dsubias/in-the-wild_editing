@@ -131,12 +131,6 @@ dmypy.json
 # pdf
 *.pdf
 
-# png 
-*.png
-
-# jpg 
-*.jpg
-
 *.zip
 
 # experiments folder
