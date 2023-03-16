@@ -66,13 +66,7 @@ def process_config(yaml_file, mode = 'train'):
 
         config.checkpoint_dir = './pretrained_models'
 
-    if config.mode != 'edit_images' and config.mode != 'edit_video':
-
-        config.sample_dir = os.path.join(config.out_root,'experiments', config.exp_name, config.output_name)
-
-    else:
-
-        config.sample_dir =  './edited_images'
+    config.sample_dir =  './edited_images'
 
     config.log_dir = os.path.join(config.out_root,'experiments', config.exp_name, 'logs/')
     config.result_dir = os.path.join(config.out_root,

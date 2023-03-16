@@ -32,6 +32,7 @@ def make_dataset(logger, root, train_file, val_file, test_folder, mode, selected
     else:
         
         lines = os.listdir(test_folder)
+        lines.sort()
         logger.info('Test Samples: ' + str(len(lines)))
 
     if mode == 'train':

@@ -6,7 +6,6 @@ ngpu: 1
 gpus: '1'
 
 # --- Editing ---
-output_name: real_new_test_set
 checkpoint: 54000 
 add_bg: False
 test_folder: test_images

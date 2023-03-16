@@ -25,6 +25,7 @@ bash download_models.sh
 
 # Create a python environment
 python -m venv itw_editing
+cd itw_editing
 pip install -r requirements.txt
 
 # Create example image
@@ -77,11 +78,13 @@ python resize.py
 python add_alpha.py
 ```
 
-These commands resize the RGB image and the alpha channel to 256x256 px. and generate the final masked image in format `PNG`. You can download the rest of the synthetic and real data used in the paper [here](-).
+These commands resize the RGB image and the alpha channel to 256x256 px. and generate the final masked image in format `PNG`. You can download the rest of the synthetic and real data used in the paper [here](-). 
 
 ## Video Editing
 
-You can also edit a video by coping its frames in `frames`
+You can also edit a video by coping its frames in `frames` using the same format presente above. You can download an example [here]().
+
+![Alt Text](imgs/video_editing.gif)
 
 ## Organization of the Code
 
@@ -101,11 +104,9 @@ For quickly start, you can simply use the following command to train:
 python train_network.py 
 ```
 
-After 50k iterations, you should get a teasers like this:
+After 51k iterations, you should get a teasers like this:
 
-TODO: Change photo
-
-<img src='imgs/mikey.png'/>
+<img src='imgs/validation_sample_51000.png'/>
 
 If you want to modify some hyper-parameters, please edit them in the configuration file `./configs/train_network.yaml` following the explanations below:
 

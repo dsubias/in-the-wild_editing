@@ -433,6 +433,7 @@ class STGANAgent(object):
                 scalars['G/loss_rec'] = g_loss_rec.item()
 
                 if self.config.use_d:
+                    
                     scalars['G/loss_adv'] = g_loss_adv.item()
                     scalars['G/loss_cls'] = g_loss_cls.item()
                     scalars['G/psnr'] = psnr
@@ -475,9 +476,7 @@ class STGANAgent(object):
 
                             x_concat = torch.cat(x_fake_list, dim=3)
                             image = make_grid(denorm(x_concat, self.device,self.config.add_bg), nrow=1)
-                            result_path = os.path.join(self.config.result_dir, 
-                                                       'sample_{}_{}.png'.format(self.config.attrs[att_idx],
-                                                       self.current_iteration))
+                            result_path = os.path.join(self.config.result_dir, 'sample_{}_{}.png'.format(self.config.attrs[att_idx],self.current_iteration))
                             save_image(image, result_path, nrow=1, padding=0)
                             del x_concat
                             del image
