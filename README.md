@@ -180,4 +180,4 @@ This code refers to the following two projects:
 
 [1] [Implementation of [Delanoy et al. 22]](https://github.com/jdelanoy/generative-material-net) 
 
-[2] [PyTorch implementation of STGAN](https://github.com/yunjey/stargan)
+[2] [PyTorch implementation of STGAN](https://github.com/bluestyle97/STGAN-pytorch)

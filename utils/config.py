@@ -55,18 +55,27 @@ def get_config_from_yaml(yaml_file):
 def process_config(yaml_file):
     config, file = get_config_from_yaml(yaml_file)
 
-    print(' *************************************** ')
-    print(' The experiment name is {} '.format(config.exp_name))
-    print(' The experiment mode is {} '.format(config.mode))
-    print(' *************************************** ')
+
 
     # create some important directories to be used for that experiments
-    config.summary_dir = os.path.join(config.out_root,
-        'experiments', config.exp_name, 'summaries/')
-    config.checkpoint_dir = os.path.join(config.out_root,
-        'experiments', config.exp_name, 'checkpoints/')
-    config.sample_dir = os.path.join(config.out_root,
-        'experiments', config.exp_name, config.output_name)
+    config.summary_dir = os.path.join(config.out_root, 'experiments', config.exp_name, 'summaries/')
+    
+    if config.mode != 'edit_images' and config.mode != 'edit_video':
+
+        config.checkpoint_dir = os.path.join(config.out_root,'experiments', config.exp_name, 'checkpoints/')
+
+    else: 
+
+        config.checkpoint_dir = './pretrained_models'
+
+    if config.mode != 'edit_images' and config.mode != 'edit_video':
+
+        config.sample_dir = os.path.join(config.out_root,'experiments', config.exp_name, config.output_name)
+
+    else:
+
+        config.sample_dir =  './edited_images'
+
     config.log_dir = os.path.join(config.out_root,'experiments', config.exp_name, 'logs/')
     config.result_dir = os.path.join(config.out_root,
         'experiments', config.exp_name, 'results/')
@@ -75,16 +84,16 @@ def process_config(yaml_file):
                 config.sample_dir, config.log_dir, config.result_dir]
     
     if config.mode == 'edit_video':
-        config.video_dir = os.path.join(config.out_root,'experiments', config.exp_name, config.output_name + '_VIDEO')
+        config.video_dir = 'video'
         dir_list.append(config.video_dir)
 
     create_dirs(dir_list)
     
     if config.mode == 'plot_metrics':
-        config.metric_dir = os.path.join(config.out_root,
-        'experiments', config.exp_name, 'results/metrics')
+        config.metric_dir = os.path.join(config.out_root,'experiments', config.exp_name, 'results/metrics')
         if not os.path.exists(config.metric_dir):
-                os.makedirs(config.metric_dir)
+            os.makedirs(config.metric_dir)
+
     if config.mode=='train':
         with open(os.path.join(config.out_root,'experiments', config.exp_name,'summary.yaml'), 'w') as f:
             yaml.dump(file, f)
@@ -92,10 +101,12 @@ def process_config(yaml_file):
 
     # setup logging in the project
     setup_logging(config.log_dir)
+    logging.getLogger().info('Hi, User :D')
+    if config.mode=='train':
+        logging.getLogger().info('The experiment name is {} '.format(config.exp_name))
 
-    logging.getLogger().info('Hi, This is root.')
-    logging.getLogger().info(
-        'After the configurations are successfully processed and dirs are created.')
+    logging.getLogger().info('The experiment mode is {} '.format(config.mode))
+    logging.getLogger().info('After the configurations are successfully processed and dirs are created.')
     logging.getLogger().info('The pipeline of the project will begin now.')
 
     return config

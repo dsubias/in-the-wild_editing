@@ -9,7 +9,7 @@ gpus: '1'
 output_name: real_new_test_set
 checkpoint: 54000 
 add_bg: False
-test_file: real_nuevo.txt
+test_folder: test_images
 
 # Image options
 att_max: 1

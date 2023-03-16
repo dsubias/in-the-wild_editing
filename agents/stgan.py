@@ -52,7 +52,7 @@ class STGANAgent(object):
             self.logger.info('Total parameters of the framework (G+D):',G_total_params+D_total_params)
 
         self.data_loader = globals()['{}_loader'.format(self.config.dataset)](
-            self.logger, self.config.data_root, self.config.train_file, self.config.val_file, self.config.test_file, self.config.mode, self.config.attrs,
+            self.logger, self.config.data_root, self.config.train_file, self.config.val_file, self.config.test_folder, self.config.mode, self.config.attrs,
             self.config.crop_size, self.config.image_size, self.config.batch_size, self.config.data_augmentation, mask_input_bg=config.mask_input_bg)
 
         self.current_iteration = 0
@@ -121,8 +121,14 @@ class STGANAgent(object):
                 self.D.to(self.device)
 
             return
+        if self.config.mode == 'train':
 
-        G_filename = 'G_{}.pth.tar'.format(self.config.checkpoint)
+            G_filename = 'G_{}.pth.tar'.format(self.config.checkpoint)
+
+        else:
+
+            G_filename = '{}.pth.tar'.format(self.config.checkpoint)
+        
         G_checkpoint = torch.load(os.path.join(self.config.checkpoint_dir, G_filename), map_location=self.device)
         G_to_load = {k.replace('module.', ''): v for k,
                      v in G_checkpoint['state_dict'].items()}
@@ -589,10 +595,10 @@ class STGANAgent(object):
     def edit_images(self, output_path, c_trg_all, video=False):
 
         editing_type = 'VIDEO' if video else 'IMAGE'
-        tqdm_loader = self.prepare_inference('[{} EDITING]: Checkpoint {}'.format(editing_type, self.config.checkpoint))
+        tqdm_loader = self.prepare_inference('[{} EDITING]: Attribute {}'.format(editing_type, self.config.checkpoint))
         with torch.no_grad():
 
-            for n_batch, (x_real, mask,rgb) in enumerate(tqdm_loader):
+            for n_batch, (x_real, mask,rgb, filename) in enumerate(tqdm_loader):
 
                 rgb = rgb.to(self.device) 
                 att_idx = 0
@@ -636,7 +642,8 @@ class STGANAgent(object):
 
                     # Save edited images
                     if not video:
-                        name = '{}_{}_{}_[{},{}]_{}.png'.format(self.config.checkpoint,n, n_batch + 1,self.config.att_min,self.config.att_max,self.config.attrs[att_idx])
+
+                        name = '{}.png'.format(filename[0])
                     else:
                         name = 'Frame_{}_{:05d}.png'.format(self.config.attrs[att_idx], n + x_real.shape[0] * n_batch)
                     result_path = os.path.join(output_path, name)
