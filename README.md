@@ -16,7 +16,7 @@ In **Eurographics 2023** (Oral Presentation)
 
 
 
-## TL;DR quickstart
+## TL;DR Quickstart
 ```
 # Clone repository and enter in the folder
 git clone git@github.com:dsubias/FaderNetworks-Materials.git
@@ -66,7 +66,7 @@ python -m venv itw_editing
 pip install -r requirements.txt
 ```
 
-## Image format
+## Image Format
 
 To edit your own images of a single object, you can add new images to `test_images` in `PNG` format. The RGB channels must depict the object and background and the alpha channel must be the shiluete of the object like this:
 
@@ -81,7 +81,11 @@ python add_alpha.py
 
 These commands resize the RGB image and the alpha channel to 256x256 px. and generate the final masked image in format `PNG`. You can download the rest of the synthetic and real data used in the paper [here](-).
 
-## Organization of the code
+## Video Editing
+
+You can also edit a video by coping its frames in `frames`
+
+## Organization of the Code
 
 * `agents` : The optimisation scheme. `STGANAgent` is an abstract agent that regroup some basic training functions, similar to Pytorch lighting abstraction.
 * `models` : code of the STGAN architecture
@@ -91,15 +95,13 @@ These commands resize the RGB image and the alpha channel to 256x256 px. and gen
 * `experiments` : snapshots of experiments
 * `test_images` : snapshots of experiments
 
-
-
 ## Training
 
 For quickly start, you can simply use the following command to train:
 
-  ```
-  python main.py --config configs/train_model.yaml
-  ```
+```
+python main.py --config configs/train_model.yaml
+```
 
 After 50k iterations, you should get a teasers like this:
 
@@ -163,6 +165,14 @@ If you want to modify some hyper-parameters, please edit them in the configurati
   - `sample_step`: 750
   - `checkpoint_step`: 750
   - `nt_step`: iteration steps per checkpoint saving operation.
+
+## Cite
+
+If you use this work, please consider citing our paper with the following Bibtex code:
+
+```
+Coming soon!
+```
 
 ## Acknowledgements
 

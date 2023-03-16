@@ -132,6 +132,7 @@ dmypy.json
 *.pdf
 
 *.zip
+*.tar
 
 # experiments folder
 experiments/
