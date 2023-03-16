@@ -15,15 +15,11 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torch.nn as nn
 import torch
-import traceback
 import datetime
 import time
 import logging
 import os
 from utils.im_util import denorm
-import numpy as np
-import cv2
-from matplotlib import cm
 cudnn.benchmark = True
 import time
 from pytorch_msssim import ssim
@@ -235,7 +231,7 @@ class STGANAgent(object):
             # for the attribute is 0.5
             # Only one editing per frame
             idw_atts = torch.ones(1,len(self.config.attrs)) * 0.5
-            print(self.config.video_dir)
+            #print(self.config.video_dir)
             os.system('rm -rf %s/*' % self.config.video_dir)
             #self.config.add_bg = True
             c_trg_all = self.create_interpolated_attr(
@@ -243,7 +239,7 @@ class STGANAgent(object):
                                                       self.config.attrs, 
                                                       self.config.att_value_frame, 
                                                       self.config.att_value_frame, 
-                                                      N_SAMPLES_VIDEO
+                                                      self.config.num_samples
                                                       )
             # Edit frames
             self.edit_images(self.config.video_dir, c_trg_all, video=True)

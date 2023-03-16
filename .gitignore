@@ -147,3 +147,7 @@ rendering_materials/
 data_45k/
 
 training_env/
+
+edited_video/*
+
+frames/*

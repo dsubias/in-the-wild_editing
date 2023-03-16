@@ -107,7 +107,7 @@ TODO: Change photo
 
 <img src='imgs/mikey.png'/>
 
-If you want to modify some hyper-parameters, please edit them in the configuration file `./configs/train_stgan.yaml` following the explanations below:
+If you want to modify some hyper-parameters, please edit them in the configuration file `./configs/train_network.yaml` following the explanations below:
 
   - `exp_name`: 256_median_new_glossy_final
   - `mode`: edit_images # train, edit_images, edit_video or plot_metrics

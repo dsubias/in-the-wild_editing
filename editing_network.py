@@ -29,24 +29,33 @@ def main():
     args.background = args.background == 'True'
     args.video = args.video == 'True'
 
+    # mode selection
+    if args.video:
+        mode = 'edit_video'
+    else: 
+
+        mode = 'edit_images'
+
     # load backbone paramters
-    config = process_config('configs/inference.yaml')
+    config = process_config('configs/inference.yaml', mode)
 
     # update editing pameters
-    # and mode
     if args.video:
-        config.mode = 'edit_video'
+
+        
         config.att_value_frame = args.max_value
         config.test_folder = './frames'
+        config.num_samples = 1
 
     else: 
-        config.mode = 'edit_images'
+
         config.test_folder = './test_images'
+        config.num_samples = args.n_samples
 
     config.add_bg = args.background
     config.att_max = args.max_value
     config.att_min = args.min_value
-    config.num_samples = args.n_samples
+    
     config.checkpoint = args.attribute
     config.cuda = False
     

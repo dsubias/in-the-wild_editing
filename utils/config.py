@@ -52,14 +52,12 @@ def get_config_from_yaml(yaml_file):
             exit(-1)
 
 
-def process_config(yaml_file):
+def process_config(yaml_file, mode = 'train'):
     config, file = get_config_from_yaml(yaml_file)
-
-
 
     # create some important directories to be used for that experiments
     config.summary_dir = os.path.join(config.out_root, 'experiments', config.exp_name, 'summaries/')
-    
+    config.mode = mode
     if config.mode != 'edit_images' and config.mode != 'edit_video':
 
         config.checkpoint_dir = os.path.join(config.out_root,'experiments', config.exp_name, 'checkpoints/')
@@ -82,9 +80,9 @@ def process_config(yaml_file):
 
     dir_list = [config.summary_dir, config.checkpoint_dir,
                 config.sample_dir, config.log_dir, config.result_dir]
-    
+
     if config.mode == 'edit_video':
-        config.video_dir = 'video'
+        config.video_dir = './edited_video'
         dir_list.append(config.video_dir)
 
     create_dirs(dir_list)
