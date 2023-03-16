@@ -14,8 +14,6 @@ In **Eurographics 2023** (Oral Presentation)
 
 <img src='imgs/teaser.jpg'/>
 
-
-
 ## TL;DR Quickstart
 ```
 # Clone repository and enter in the folder
@@ -34,7 +32,7 @@ python resize.py
 python add_alpha.py
 
 # Run the editing framework
-test_network.py test_images/mikey.png 1.0 glossy test_glossy_1.png
+editing_network.py
 ```
 
 If everything works without errors,  you can now go to `edited_images` and watch a teaser like this:
@@ -100,7 +98,7 @@ You can also edit a video by coping its frames in `frames`
 For quickly start, you can simply use the following command to train:
 
 ```
-python main.py --config configs/train_model.yaml
+python train_network.py 
 ```
 
 After 50k iterations, you should get a teasers like this:
