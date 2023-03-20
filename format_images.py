@@ -16,10 +16,13 @@ for image in images:
 
     orig_img = Image.open(os.path.join(ORG_INPUT_PATH, image))
     resized_image = T.Resize(size=[256, 256])(orig_img)
-    alpha = Image.open(os.path.join(MASKED_INPUT_PATH, image[:-4] +'png') ).convert('L')
+    extension_lenght = len(os.path.join(ORG_INPUT_PATH, image).split('.')[-1])
+    alpha = Image.open(os.path.join(MASKED_INPUT_PATH, image[:-extension_lenght] +'png') ).convert('L')
     alphagarr = np.array(alpha) 
     alphagarr[ alphagarr != 0] = 255
     alpha = Image.fromarray(np.uint8(alphagarr)).convert('L')
     resized_alpha = T.Resize(size=[256, 256])(alpha)
     resized_image.putalpha(resized_alpha)
-    resized_image.save(os.path.join(OUTPUT_PATH, image[:-4] +'png'))
+    resized_image.save(os.path.join(OUTPUT_PATH, image[:-extension_lenght] +'png'))
+
+print('Formated {} Images :D'.format(len(images)))
