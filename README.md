@@ -137,14 +137,14 @@ If you want to modify some hyper-parameters, please edit them in the configurati
 - `d_lr`: the base learning rate of D.
 - `n_critic`: the number of D updates per each G update.
 - `use_d`: if set to false, only G is trained.
-- `checkpoint`: the iteration step number of the checkpoint to be resumed. Notice: please set this to ~ if it's first time to train.
+- `checkpoint`: the iteration step number of the checkpoint to be resumed. Notice: please set this to **~** if it's first time to train.
 - `lambda_gp`: tradeoff coefficient of D_loss_gp.
 - `lambda_1`: tradeoff coefficient of D_loss_att.
 - `lambda_2`: tradeoff coefficient of G_loss_att.
 - `lambda_3`: tradeoff coefficient of G_loss_att.
 - `attrs`: the target attribute: `glossy` or `metallic`
 - `uniform`:  if set to false, ramdom permutations of the attribute labels will be use to generate fake images during training.
-- `max_epochs`: numer of epochs to train.<>
+- `max_epochs`: numer of epochs to train.
 - `summary_step`: iteration steps per summary operation with tensorboardX.
 - `sample_step`: iteration steps per sampling operation.
 - `checkpoint_step`: iteration steps per checkpoint saving operation.
