@@ -16,7 +16,7 @@ def main():
     arg_parser.add_argument('-a', '--attribute', type=str, default='glossy', help='')   
     arg_parser.add_argument('-max', '--max_value', type=float, default = 1., help='') 
     arg_parser.add_argument('-min', '--min_value', type=float, default = 0., help='')  
-    arg_parser.add_argument('-n', '--n_samples', type=int, default = 9, help='')  
+    arg_parser.add_argument('-n', '--n_samples', type=int, default = 5, help='')  
     arg_parser.add_argument('-b', '--background', type=str, default='True', choices=['True', 'False'], help='') 
     arg_parser.add_argument('-v', '--video', type=str,  default='False', choices=['True', 'False'], help='') 
     
