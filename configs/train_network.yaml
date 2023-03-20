@@ -16,6 +16,7 @@ image_size: 256
 data_augmentation: True
 mask_input_bg: True
 add_bg: False
+test_folder: ~ # Not used in training
 
 # model
 g_conv_dim: 32
@@ -40,6 +41,9 @@ ld_n_critic: 10
 thres_int: 1.0
 use_d: True
 checkpoint: ~
+att_min: 0.
+att_max: 1.
+num_samples: 9
 
 # tradeoff parameters
 lambda_gp: 10
@@ -54,9 +58,6 @@ default_att: 0.5
 
 # iterations
 max_epochs: 50
-lr_decay_iters: 55000000
-
-# steps:
-summary_step: 100
-sample_step: 750
-checkpoint_step: 750
+summary_step: 1 #100
+sample_step: 1 #750
+checkpoint_step: 1 #750
