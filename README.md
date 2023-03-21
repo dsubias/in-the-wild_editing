@@ -2,7 +2,7 @@
 
 ### [Project Page](https://dsubias.github.io/publication/in-the-wild_editing/) | [Paper](https://arxiv.org/pdf/2302.03619.pdf) | [Data](https://drive.google.com/drive/folders/10qsYxPXR4cperbbkzmMNM0MKGNpj3kSx?usp=share_link)
 
-An official **PyTorch**  implementation of [**In-the-wild Material Appearance Editing using Perceptual Attributes**](). 
+The official **PyTorch**  implementation of [**In-the-wild Material Appearance Editing using Perceptual Attributes**](). 
 
 
 [J. Daniel Subias](https://dsubias.github.io/#about)<sup>1</sup>,
