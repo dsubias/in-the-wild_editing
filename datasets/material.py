@@ -2,16 +2,11 @@ import os
 import math
 import torch
 from torch.utils import data
-from torchvision import transforms as Tvision
-from PIL import Image
-import random
 import numpy as np
 import cv2
-from matplotlib import pyplot as plt
-from torchvision.utils import save_image
 from datasets.transforms import *
 
-def make_dataset(root, train_file, val_file, test_file, mode, selected_attrs):
+def make_dataset(logger, root, train_file, val_file, test_folder, mode, selected_attrs):
 
     assert mode in ['train', 'val', 'edit_images', 'edit_video', 'plot_metrics']
 
@@ -20,55 +15,64 @@ def make_dataset(root, train_file, val_file, test_file, mode, selected_attrs):
         root,  train_file), 'r')]
     
         lines = file_lines[1:]
-        print('Train Samples:', len(lines))
+        logger.info('Train Samples: ' + str(len(lines)))
 
-    elif mode == 'val':  # put in first half a batch of test images, half of training images
+    elif mode in ['val', 'plot_metrics']: 
         
         file_lines = [line.rstrip() for line in open(os.path.join(
                       root,  val_file), 'r')] 
         lines = file_lines[1:]
-        print('Validation Samples:', len(lines))
+        logger.info('Validation Samples: ' + str(len(lines)))
 
     else:
-        file_lines = [line.rstrip() for line in open(os.path.join(
-                      root, test_file), 'r')]
-        lines = file_lines[1:]
-        print('Test Samples', len(lines))
+        
+        lines = os.listdir(test_folder)
+        lines.sort()
+        logger.info('Test Samples: ' + str(len(lines)))
 
-    all_attr_names = file_lines[0].split()
-    print('Mode: ', mode, ', Attributes in the dataset: ', all_attr_names)
-    attr2idx = {}
-    idx2attr = {}
+    if mode == 'train':
 
-    for i, attr_name in enumerate(all_attr_names):
-        attr2idx[attr_name] = i
-        idx2attr[i] = attr_name
+        all_attr_names = file_lines[0].split()
+        logger.info('Attributes in the dataset: ' + str(all_attr_names))
+        attr2idx = {}
+        idx2attr = {}
+        
+
+        for i, attr_name in enumerate(all_attr_names):
+
+            attr2idx[attr_name] = i
+            idx2attr[i] = attr_name
 
     files = []
     mat_attrs = []
-    material = []
-    geometry = []
-    illumination = []
 
     for i, line in enumerate(lines):
         split = line.split()
         filename = split[0]
         
-        values = split[1:]
+        if mode == 'train':
+            values = split[1:]
+
         mat_attr = []
+
         for attr_name in selected_attrs:
 
-            idx = attr2idx[attr_name]
-            mat_attr.append(float(values[idx]))
+            if mode in ['train', 'plot_metrics'] :
+
+                idx = attr2idx[attr_name]
+                mat_attr.append(float(values[idx]))
+
+            else:
+
+                # when editing in the wild we assume 0.5 as the original 
+                # value of the attribute
+                mat_attr.append(0.5)
         
         files.append(filename)
         mat_attrs.append(mat_attr)
 
     return {'files': files,
-            'mat_attrs': mat_attrs,
-            'materials': material,
-            'geometries': geometry,
-            'illuminations': illumination}
+            'mat_attrs': mat_attrs}
 
 def list2idxs(l):
 
@@ -89,8 +93,9 @@ def get_mask(image,image_rgb):
 
 
 class MaterialDataset(data.Dataset):
-    def __init__(self, root, train_file, val_file, test_file, mode, selected_attrs, transform=None, mask_input_bg=True, use_illum=False):
-        items = make_dataset(root, train_file, val_file, test_file, mode, selected_attrs)
+
+    def __init__(self, root, train_file, val_file, test_folder, mode, selected_attrs, logger, transform=None, mask_input_bg=True, use_illum=False):
+        items = make_dataset(logger, root, train_file, val_file, test_folder, mode, selected_attrs)
 
         self.files = items['files']
         self.mat_attrs = items['mat_attrs']
@@ -99,6 +104,7 @@ class MaterialDataset(data.Dataset):
         self.transform = transform
         self.mask_input_bg = mask_input_bg
         self.use_illum = use_illum
+        self.test_folder = test_folder
 
     def __getitem__(self, index_and_mode):
         
@@ -134,8 +140,8 @@ class MaterialDataset(data.Dataset):
                             [0, 0, 1, 1, 2, 2, 6, 3])
         else:
 
-            image = cv2.cvtColor(cv2.imread(os.path.join(self.root, "renderings", self.files[index]), cv2.IMREAD_UNCHANGED), cv2.COLOR_BGRA2RGBA)
-            image_rgb = cv2.cvtColor(cv2.imread(os.path.join(self.root, "renderings", self.files[index]), 1), cv2.COLOR_BGR2RGB)
+            image = cv2.cvtColor(cv2.imread(os.path.join(self.test_folder, self.files[index]), cv2.IMREAD_UNCHANGED), cv2.COLOR_BGRA2RGBA)
+            image_rgb = cv2.cvtColor(cv2.imread(os.path.join(self.test_folder, self.files[index]), 1), cv2.COLOR_BGR2RGB)
             mask, rgb = get_mask(image,image_rgb)
         
         if self.transform is not None:
@@ -145,13 +151,14 @@ class MaterialDataset(data.Dataset):
         if self.mask_input_bg:
             image = image*image[3:]
 
+        filename = self.files[index].split('/')[-1][:-4]
         if self.mode == 'edit_images' or self.mode == 'edit_video':
 
-            return image, mask, rgb
+            return image, mask, rgb, filename
         
         elif self.mode == 'plot_metrics':
             
-            filename = self.files[index].split('/')[1][:-4]
+            
             return image, torch.FloatTensor(mat_attr), filename
         
         else:
@@ -163,7 +170,7 @@ class MaterialDataset(data.Dataset):
 
 # the main dataloader
 class MaterialDataLoader(object):
-    def __init__(self, root, train_file, val_file, test_file, mode, selected_attrs, crop_size=None, image_size=128, batch_size=16, data_augmentation=True, mask_input_bg=True, use_illum=False):
+    def __init__(self, logger, root, train_file, val_file, test_folder, mode, selected_attrs, crop_size=None, image_size=128, batch_size=16, data_augmentation=True, mask_input_bg=True, use_illum=False):
         if mode not in ['train', 'val', 'edit_images', 'edit_video', 'plot_metrics']:
             return
 
@@ -182,20 +189,20 @@ class MaterialDataLoader(object):
         if mode == 'train':
             
             val_set = MaterialDataset(
-                root, train_file, val_file, test_file, 'val', selected_attrs, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
+                root, train_file, val_file, test_folder, 'val', selected_attrs, logger, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
             self.val_loader = data.DataLoader(
                 val_set, batch_size=batch_size, shuffle=False, num_workers=4)
             self.val_iterations = int(math.ceil(len(val_set) / batch_size))
 
             train_set = MaterialDataset(
-                root, train_file, val_file, test_file, 'train', selected_attrs, transform=train_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
+                root, train_file, val_file, test_folder, 'train', selected_attrs, logger, transform=train_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
             self.train_loader = data.DataLoader(
                 train_set, batch_size=batch_size, shuffle=True, num_workers=4)
             self.train_iterations = int(math.ceil(len(train_set) / batch_size))
         else:
             batch_size = 1
             test_set = MaterialDataset(
-                root, train_file, val_file, test_file,  mode, selected_attrs, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
+                root, train_file, val_file, test_folder,  mode, selected_attrs, logger, transform=val_trf, mask_input_bg=mask_input_bg, use_illum=use_illum)
             self.test_loader = data.DataLoader(
                 test_set, batch_size=batch_size, shuffle=False, num_workers=1)
             self.test_iterations = int(math.ceil(len(test_set) / batch_size))

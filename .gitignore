@@ -131,13 +131,8 @@ dmypy.json
 # pdf
 *.pdf
 
-# png 
-*.png
-
-# jpg 
-*.jpg
-
 *.zip
+*.tar
 
 # experiments folder
 experiments/
@@ -151,6 +146,8 @@ rendering_materials/
 
 data_45k/
 
-pix2normal/
-
 training_env/
+
+edited_video/*
+
+frames/*

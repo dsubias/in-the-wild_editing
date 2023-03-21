@@ -1,26 +1,22 @@
 # meta
-exp_name: 256_median_new_metallic_final
-output_name: textures_bg
-mode: test
-cuda: False
+exp_name: debug_gloss #256_median_new_glossy_final
+mode: train # train, edit_images, edit_video or plot_metrics
+cuda: True
 ngpu: 1
 gpus: '0'
 
 # data
 dataset: material
-data_root: /media/raid/dsubias/data_45k
-out_root: /media/raid/dsubias
+data_root: /home/graphics/dsubias/work_directory/data_45k
+out_root: /home/graphics/dsubias/work_directory/FaderNetworks-Materials
 train_file: attributes_dataset_train_new_median_illum.txt
 val_file: attributes_dataset_synthetic.txt
-test_file: textures.txt
 crop_size: 480
 image_size: 256
 data_augmentation: True
 mask_input_bg: True
-histogram: True
-histogram_color_type: hsv
 add_bg: False
-video: False
+test_folder: ~ # Not used in training
 
 # model
 g_conv_dim: 32
@@ -33,10 +29,9 @@ stu_kernel_size: 3
 use_stu: True
 deconv: False
 one_more_conv: True
-checkpoint: 55500 #56250
 
 # training
-batch_size: 8
+batch_size: 32
 beta1: 0.5
 beta2: 0.999
 g_lr: 0.0002
@@ -44,11 +39,11 @@ d_lr: 0.0002
 n_critic: 7
 ld_n_critic: 10
 thres_int: 1.0
-thres_edition: 1.0
-g_xavier_init: False
-d_xavier_init: False
-ld_xavier_init: False 
 use_d: True
+checkpoint: ~
+att_min: 0.
+att_max: 1.
+num_samples: 9
 
 # tradeoff parameters
 lambda_gp: 10
@@ -57,18 +52,12 @@ lambda_2: 100 # att generator (original value = 10)
 lambda_3: 1000 # reconstruction generator (original value = 100)
 
 # attributes
-att_max: 1
-att_min: 0
-num_samples: 9
-attrs: [ metallic ]
+attrs: [ glossy ]
 uniform: True
 default_att: 0.5
 
 # iterations
 max_epochs: 50
-lr_decay_iters: 55000
-
-# steps:
-summary_step: 500
-sample_step: 2500
-checkpoint_step: 2500
+summary_step: 100
+sample_step: 750
+checkpoint_step: 750

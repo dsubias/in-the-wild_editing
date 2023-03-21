@@ -38,8 +38,10 @@ def print_cuda_statistics():
 def create_dirs(dirs):
     try:
         for dir_ in dirs:
+            print(dir_)
             if not os.path.exists(dir_):
                 os.makedirs(dir_)
     except Exception as err:
+        print(err)
         logging.getLogger("Dirs Creator").info("Creating directories error: {0}".format(err))
         exit(-1)
