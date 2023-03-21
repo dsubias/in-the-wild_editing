@@ -1,9 +1,9 @@
 # meta
 exp_name: debug #256_median_new_glossy_final
 mode: train # train, edit_images, edit_video or plot_metrics
-cuda: False
+cuda: True
 ngpu: 1
-gpus: '1'
+gpus: '0'
 
 # --- Editing ---
 output_name: eg_bg
@@ -21,8 +21,8 @@ att_value_frame : 1
 
 # data
 dataset: material
-data_root: /media/raid/dsubias/data_45k
-out_root: /media/raid/dsubias
+data_root: /home/graphics/dsubias/work_directory/data_45k
+out_root: /home/graphics/dsubias/work_directory/FaderNetworks-Materials
 train_file: attributes_dataset_train_new_median_illum.txt
 val_file: attributes_dataset_synthetic.txt
 crop_size: 480
