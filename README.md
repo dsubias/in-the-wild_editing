@@ -1,6 +1,6 @@
 # In-the-wild Material Appearance Editing using Perceptual Attributes 
 
-### [Project Page](https://dsubias.github.io/publication/in-the-wild_editing/) | [Paper](https://arxiv.org/pdf/2302.03619.pdf) | [Data](-)
+### [Project Page](https://dsubias.github.io/publication/in-the-wild_editing/) | [Paper](https://arxiv.org/pdf/2302.03619.pdf) | [Data](https://drive.google.com/drive/folders/10qsYxPXR4cperbbkzmMNM0MKGNpj3kSx?usp=share_link)
 
 An official **PyTorch**  implementation of [**In-the-wild Material Appearance Editing using Perceptual Attributes**](). 
 
@@ -39,7 +39,7 @@ If everything works without errors,  you can now go to `edited_images` and watch
 
 <img src='imgs/luffy.png'/>
 
-**Notice**: the first one corresponds to the original image.
+**Notice**: the first one corresponds to the original image. Image taken from [here](https://cdn.mainichi.jp/vol1/2020/08/28/20200828p2a00m0na015000p/8.jpg?2).
 
 ## Setup
 
@@ -121,8 +121,8 @@ If you want to modify some hyper-parameters, please edit them in the configurati
 - `cuda`: use CUDA or not.
 - `ngpu`: how many gpu cards to use. **Notice**: this number should be equal than the length of `gpus_list`.
 - `gpus`: list of gpus to train.
-- `data_root`: the root of dataset
-- `out_root`: the root to output experiments
+- `data_root`: the root of dataset.
+- `out_root`: the root to output experiments.
 - `train_file`: the file with the ground-truth attribute labels and image names used to train the network.
 - `val_file`: the file with the synthetic or ground-truth attribute values and image names used to validate editing ability of the network or compute metrics.
 - `crop_size`: size of the crop used in the data augmentation.
@@ -147,14 +147,14 @@ If you want to modify some hyper-parameters, please edit them in the configurati
 - `n_critic`: the number of D updates per each G update.
 - `use_d`: if set to false, only G is trained.
 - `checkpoint`: the iteration step number of the checkpoint to be resumed. **Notice**: please set this to **~** if it's first time to train.
-- att_min: min attribute value for the teasers generated in the validation stept.
-- att_max: max attribute value for the teasers generated in the validation stept.
-- num_samples: number of samples for the teasers generated in the validation stept.
+- `att_min`: min attribute value for the teasers generated in the validation stept.
+- `att_max`: max attribute value for the teasers generated in the validation stept.
+- `num_samples`: number of samples for the teasers generated in the validation stept.
 - `lambda_gp`: tradeoff coefficient of D_loss_gp.
 - `lambda_1`: tradeoff coefficient of D_loss_att.
 - `lambda_2`: tradeoff coefficient of G_loss_att.
 - `lambda_3`: tradeoff coefficient of G_loss_att.
-- `attrs`: the target attribute: `glossy` or `metallic`
+- `attrs`: the target attribute: `glossy` or `metallic`.
 - `uniform`:  if set to false, ramdom permutations of the attribute labels will be use to generate fake images during training.
 - `max_epochs`: numer of epochs to train.
 - `summary_step`: iteration steps per summary operation with tensorboardX.

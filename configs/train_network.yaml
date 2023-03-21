@@ -7,7 +7,7 @@ gpus: '1'
 
 # data
 dataset: material
-data_root: /media/raid/dsubias/data_45k
+data_root: './data'
 out_root: '.'
 train_file: attributes_dataset_train_new_median_illum.txt
 val_file: attributes_dataset_synthetic.txt
