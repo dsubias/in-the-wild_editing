@@ -127,7 +127,7 @@ Download the training data [here](https://drive.google.com/file/d/1Z5wEFox1fWaBq
 python train_network.py 
 ```
 
-After 51k iterations, you should get a teasers like this:
+After 51k iterations, you should get teasers like this:
 
 <img src='imgs/validation_sample_51000.png'/>
 

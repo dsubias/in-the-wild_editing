@@ -132,7 +132,6 @@ dmypy.json
 *.pdf
 
 *.zip
-*.tar
 
 # experiments folder
 experiments/
@@ -151,3 +150,5 @@ training_env/
 edited_video/*
 
 frames/*
+
+pretrained_models/*
