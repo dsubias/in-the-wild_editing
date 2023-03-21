@@ -4,13 +4,12 @@ import logging
 from logging import Formatter
 from logging.handlers import RotatingFileHandler
 from easydict import EasyDict
-
 from utils.misc import create_dirs
 
 try:
-    from yaml import CLoader as Loader, CDumper as Dumper
+    from yaml import CLoader as Loader
 except ImportError:
-    from yaml import Loader, Dumper
+    from yaml import Loader
 
 
 def setup_logging(log_dir):

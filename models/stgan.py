@@ -60,12 +60,14 @@ class Generator(nn.Module):
         self.shortcut_layers = min(shortcut_layers, n_layers - 1)
         self.use_stu = use_stu
         self.deconv = deconv
+        in_channels = 3
 
+        
         if not self.deconv:
             self.upsample = nn.Upsample(
                 scale_factor=2, mode='bilinear', align_corners=False)
         self.encoder = nn.ModuleList()
-        in_channels = 3
+        
         for i in range(self.n_layers):
             self.encoder.append(nn.Sequential(
                 nn.Conv2d(in_channels, conv_dim * 2 ** i, 4, 2, 1, bias=False),

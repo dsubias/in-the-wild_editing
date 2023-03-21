@@ -1,7 +1,3 @@
-from distutils.command.config import config
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 from numpy.core.function_base import linspace
 from tqdm import tqdm, trange
 from utils.misc import print_cuda_statistics
@@ -24,7 +20,7 @@ cudnn.benchmark = True
 import time
 from pytorch_msssim import ssim
 import moviepy.video.io.ImageSequenceClip
-N_SAMPLES_VIDEO = 1
+import traceback
 
 class STGANAgent(object):
 
@@ -199,59 +195,58 @@ class STGANAgent(object):
     def run(self):
 
         assert self.config.mode in ['train', 'edit_images','edit_video', 'plot_metrics']
-        # try:
-        if self.config.mode == 'train':
+        try:
+            if self.config.mode == 'train':
 
-            self.train()
+                self.train()
 
-        elif self.config.mode == 'edit_images':
-            
-            # When editing in the wild, we asume the original value
-            # for the attribute is 0.5
-            idw_atts = torch.ones(1,len(self.config.attrs)) * 0.5
-            c_trg_all = self.create_interpolated_attr(
-                                                      idw_atts,
-                                                      self.config.attrs, 
-                                                      self.config.att_min, 
-                                                      self.config.att_max, 
-                                                      self.config.num_samples
-                                                      )
-            # Edit images
-            self.edit_images(self.config.sample_dir, c_trg_all, video=False)
+            elif self.config.mode == 'edit_images':
+                
+                # When editing in the wild, we asume the original value
+                # for the attribute is 0.5
+                idw_atts = torch.ones(1,len(self.config.attrs)) * 0.5
+                c_trg_all = self.create_interpolated_attr(
+                                                        idw_atts,
+                                                        self.config.attrs, 
+                                                        self.config.att_min, 
+                                                        self.config.att_max, 
+                                                        self.config.num_samples
+                                                        )
+                # Edit images
+                self.edit_images(self.config.sample_dir, c_trg_all, video=False)
 
-        elif self.config.mode == 'edit_video':
-            
-            # When editing in the wild, we asume the original value 
-            # for the attribute is 0.5
-            # Only one editing per frame
-            idw_atts = torch.ones(1,len(self.config.attrs)) * 0.5
-            #print(self.config.video_dir)
-            os.system('rm -rf %s/*' % self.config.video_dir)
-            #self.config.add_bg = True
-            c_trg_all = self.create_interpolated_attr(
-                                                      idw_atts,
-                                                      self.config.attrs, 
-                                                      self.config.att_value_frame, 
-                                                      self.config.att_value_frame, 
-                                                      self.config.num_samples
-                                                      )
-            # Edit frames
-            self.edit_images(self.config.video_dir, c_trg_all, video=True)
-            self.make_video()
+            elif self.config.mode == 'edit_video':
+                
+                # When editing in the wild, we asume the original value 
+                # for the attribute is 0.5
+                # Only one editing per frame
+                idw_atts = torch.ones(1,len(self.config.attrs)) * 0.5
+                #print(self.config.video_dir)
+                os.system('rm -rf %s/*' % self.config.video_dir)
+                #self.config.add_bg = True
+                c_trg_all = self.create_interpolated_attr(
+                                                        idw_atts,
+                                                        self.config.attrs, 
+                                                        self.config.att_value_frame, 
+                                                        self.config.att_value_frame, 
+                                                        self.config.num_samples
+                                                        )
+                # Edit frames
+                self.edit_images(self.config.video_dir, c_trg_all, video=True)
+                self.make_video()
 
-        elif self.config.mode == 'plot_metrics':
+            elif self.config.mode == 'plot_metrics':
 
-            self.plot_metrics()
+                self.plot_metrics()
 
-        # except KeyboardInterrupt:
-            # self.logger.info('You have entered CTRL+C.. Wait to finalize')
-        # except Exception as e:
-            # log_file = open(os.path.join(
-            #    self.config.log_dir, 'exp_error.log'), 'w+')
-            # traceback.print_exc(file=log_file)
-            # print(str(e))
-        # finally:
-            # self.finalize()
+        except KeyboardInterrupt:
+            self.logger.info('You have entered CTRL+C.. Wait to finalize')
+        except Exception as e:
+            log_file = open(os.path.join(self.config.log_dir, 'exp_error.log'), 'w+')
+            traceback.print_exc(file=log_file)
+            print(str(e))
+        finally:
+            self.finalize()
 
     def train(self):
         

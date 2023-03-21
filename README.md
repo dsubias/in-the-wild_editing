@@ -25,7 +25,7 @@ bash download_models.sh
 
 # Create a python environment
 python -m venv editing_env
-cd editing_env
+source editing_env/bin/activate
 pip install -r requirements.txt
 
 # Create example image
@@ -33,13 +33,16 @@ python format_images.py
 
 # Run the editing framework
 editing_network.py
+
+# Deactivate the python environment
+deactivate
 ```
 
 If everything works without errors,  you can now go to `edited_images` and watch a teaser like this:
 
 <img src='imgs/luffy.png'/>
 
-**Notice**: the first one corresponds to the original image. Image taken from [here](https://cdn.mainichi.jp/vol1/2020/08/28/20200828p2a00m0na015000p/8.jpg?2).
+**Notice**: the first one corresponds to the original image taken from [here](https://cdn.mainichi.jp/vol1/2020/08/28/20200828p2a00m0na015000p/8.jpg?2).
 
 ## Setup
 
@@ -64,6 +67,7 @@ We provide a requirements file including all of the above dependencies to create
 
 ```
 python -m venv editing_env
+source editing_env/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -104,7 +108,7 @@ If everything works without errors,  you can now go to `edited_video` and watch 
 
 ## Training
 
-For quickly start, you can simply use the following command to train:
+Download the training data [here](https://drive.google.com/file/d/1Z5wEFox1fWaBqmwMskShkzBudyc_dWdU/view?usp=share_link) and move them to `data`. For quickly start to train a model, you can simply use the following command:
 
 ```
 python train_network.py 

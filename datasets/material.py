@@ -2,13 +2,8 @@ import os
 import math
 import torch
 from torch.utils import data
-from torchvision import transforms as Tvision
-from PIL import Image
-import random
 import numpy as np
 import cv2
-from matplotlib import pyplot as plt
-from torchvision.utils import save_image
 from datasets.transforms import *
 
 def make_dataset(logger, root, train_file, val_file, test_folder, mode, selected_attrs):
