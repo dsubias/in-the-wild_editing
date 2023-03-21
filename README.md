@@ -32,7 +32,7 @@ pip install -r requirements.txt
 python format_images.py
 
 # Run the editing framework
-editing_network.py
+editing_network.py -a glossy
 
 # Deactivate the python environment
 deactivate
@@ -43,6 +43,17 @@ If everything works without errors,  you can now go to `edited_images` and watch
 <img src='imgs/luffy.png'/>
 
 **Notice**: the first one corresponds to the original image taken from [here](https://cdn.mainichi.jp/vol1/2020/08/28/20200828p2a00m0na015000p/8.jpg?2).
+
+## Editing Parameters
+
+The editing script `editing_network.py` has the following parameters:
+
+- `-a`: the target high-level perceptual attribute: `glossy` or `metallic`, **default**: glossy.
+- `-max`: the maximun value for the attribute, **default**: 1.
+- `-min`: the minimun value for the attribute, **default**: 0.125.
+- `-n`: number of samples generated between the minimun and maximun attribute values, **default**: 4.
+- `-b`: if set to False the background is omitted in the edited images, **default**: True.
+- `-v`: if set to True the input folder is `frames` and the program builds a video where each frame is edited taking the maximum value of the attribute, **default**: False.
 
 ## Setup
 
@@ -97,6 +108,8 @@ If everything works without errors,  you can now go to `edited_video` and watch 
 
 ![Alt Text](imgs/video_editing.gif)
 
+**Notice**: the left video corresponds to the original one.
+
 ## Organization of the Code
 
 * `agents` : The optimisation scheme. `STGANAgent` is an abstract agent that regroup some basic training functions, similar to Pytorch lighting abstraction.
@@ -140,16 +153,16 @@ If you want to modify some hyper-parameters, please edit them in the configurati
 - `d_layers`: the number of convolutional layers in D.
 - `shortcut_layers`: the number of skip connections in G. **Notice**: also the number of STUs.
 - `stu_kernel_size`: the kernel size of convolutional layers in STU.
-- `use_stu`:  if set to false, there will be no STU in skip connections.
-- `deconv`: if set to false, there will be no deconvolutions in G, D and STUs.
-- `one_more_conv`: if set to true, there will be another convolutional layer between the decoder and generated image.
+- `use_stu`:  if set to False, there will be no STU in skip connections.
+- `deconv`: if set to False, there will be no deconvolutions in G, D and STUs.
+- `one_more_conv`: if set to True, there will be another convolutional layer between the decoder and generated image.
 - `batch_size`: batch size of data loader.
 - `beta1`: beta1 value of Adam optimizer.
 - `beta2`: beta2 value of Adam optimizer.
 - `g_lr`: the base learning rate of G.
 - `d_lr`: the base learning rate of D.
 - `n_critic`: the number of D updates per each G update.
-- `use_d`: if set to false, only G is trained.
+- `use_d`: if set to False, only G is trained.
 - `checkpoint`: the iteration step number of the checkpoint to be resumed. **Notice**: please set this to **~** if it's first time to train.
 - `att_min`: min attribute value for the teasers generated in the validation stept.
 - `att_max`: max attribute value for the teasers generated in the validation stept.
@@ -159,7 +172,7 @@ If you want to modify some hyper-parameters, please edit them in the configurati
 - `lambda_2`: tradeoff coefficient of G_loss_att.
 - `lambda_3`: tradeoff coefficient of G_loss_att.
 - `attrs`: the target attribute: `glossy` or `metallic`.
-- `uniform`:  if set to false, ramdom permutations of the attribute labels will be use to generate fake images during training.
+- `uniform`:  if set to False, ramdom permutations of the attribute labels will be use to generate fake images during training.
 - `max_epochs`: numer of epochs to train.
 - `summary_step`: iteration steps per summary operation with tensorboardX.
 - `sample_step`: iteration steps per sampling operation.

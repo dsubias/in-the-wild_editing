@@ -13,12 +13,12 @@ def main():
 
     # Parameter definitions
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument('-a', '--attribute', type=str, default='glossy', choices=['glossy', 'metallic'], help='')   
-    arg_parser.add_argument('-max', '--max_value', type=float, default = 1., help='') 
-    arg_parser.add_argument('-min', '--min_value', type=float, default = 0.125, help='')  
-    arg_parser.add_argument('-n', '--n_samples', type=int, default = 4, help='')  
-    arg_parser.add_argument('-b', '--background', type=str, default='True', choices=['True', 'False'], help='') 
-    arg_parser.add_argument('-v', '--video', type=str,  default='False', choices=['True', 'False'], help='') 
+    arg_parser.add_argument('-a', '--attribute', type=str, default='glossy', choices=['glossy', 'metallic'])   
+    arg_parser.add_argument('-max', '--max_value', type=float, default = 1.) 
+    arg_parser.add_argument('-min', '--min_value', type=float, default = 0.125)  
+    arg_parser.add_argument('-n', '--n_samples', type=int, default = 4)  
+    arg_parser.add_argument('-b', '--background', type=str, default='True', choices=['True', 'False']) 
+    arg_parser.add_argument('-v', '--video', type=str,  default='False', choices=['True', 'False']) 
     
     # interval checks
     args = arg_parser.parse_args()
