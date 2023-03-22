@@ -1,5 +1,5 @@
 # meta
-exp_name: debug_gloss #256_median_new_glossy_final
+exp_name: debug_metallic #256_median_new_glossy_final
 mode: train # train, edit_images, edit_video or plot_metrics
 cuda: True
 ngpu: 1
@@ -52,7 +52,7 @@ lambda_2: 100 # att generator (original value = 10)
 lambda_3: 1000 # reconstruction generator (original value = 100)
 
 # attributes
-attrs: [ glossy ]
+attrs: [ metallic ]
 uniform: True
 default_att: 0.5
 

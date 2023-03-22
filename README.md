@@ -28,7 +28,7 @@ python -m venv editing_env
 source editing_env/bin/activate
 pip install -r requirements.txt
 
-# Create example image
+# Create an example image
 python format_images.py
 
 # Run the editing framework
@@ -112,12 +112,12 @@ If everything works without errors,  you can now go to `edited_video` and watch 
 
 ## Organization of the Code
 
-* `agents` : The optimisation scheme. `STGANAgent` is an abstract agent that regroup some basic training functions, similar to Pytorch lighting abstraction.
-* `models` : code of the STGAN architecture
-* `datasets` : code to read the datasets
-* `utils` : various utilities
-* `configs` : configuration files to launch the trainings or test
-* `experiments` : snapshots of experiments
+* `agents`: The optimisation scheme. `STGANAgent` is an abstract agent that regroup some basic training functions, similar to Pytorch lighting abstraction.
+* `models`: code of the STGAN architecture
+* `datasets`: code to read the datasets
+* `utils`: various utilities
+* `configs`: configuration files to launch the trainings or test
+* `experiments`: snapshots of experiments
 
 ## Training
 
@@ -127,9 +127,9 @@ Download the training data [here](https://drive.google.com/file/d/1Z5wEFox1fWaBq
 python train_network.py 
 ```
 
-After 51k iterations, you should get teasers like this:
+After 54k iterations, you should get teasers like this:
 
-<img src='imgs/validation_sample_51000.png'/>
+<img src='imgs/sample_glossy_54000.png'/>
 
 If you want to modify some hyper-parameters, please edit them in the configuration file `./configs/train_network.yaml` following the explanations below:
 

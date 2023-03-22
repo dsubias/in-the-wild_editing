@@ -54,10 +54,13 @@ class STGANAgent(object):
         assert len (self.config.gpus.split(',')) == self.config.ngpu
 
         if self.cuda:
+
             self.device = torch.device("cuda:"+self.config.gpus)
             self.logger.info("Operation will be on *****GPU-CUDA***** ")
             print_cuda_statistics()
+
         else:
+            
             self.device = torch.device("cpu")
             self.logger.info("Operation will be on *****CPU***** ")
 
