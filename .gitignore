@@ -152,3 +152,5 @@ edited_video/*
 frames/*
 
 pretrained_models/*
+
+editing_env/

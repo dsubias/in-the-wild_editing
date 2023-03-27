@@ -1,9 +1,8 @@
 # In-the-wild Material Appearance Editing using Perceptual Attributes 
 
-### [Project Page](https://dsubias.github.io/publication/in-the-wild_editing/) | [Paper](https://arxiv.org/pdf/2302.03619.pdf) | [Data](https://drive.google.com/drive/folders/10qsYxPXR4cperbbkzmMNM0MKGNpj3kSx?usp=share_link)
+### [![Project page](https://img.shields.io/badge/-Project%20page-blue)](https://dsubias.github.io/publication/in-the-wild_editing/) | [![Paper](https://img.shields.io/badge/Paper-PDF-red)](https://arxiv.org/pdf/2302.03619.pdf) | [![Data](https://img.shields.io/badge/-Data-yellowgreen)](https://drive.google.com/drive/folders/10qsYxPXR4cperbbkzmMNM0MKGNpj3kSx?usp=share_link)
 
 The official **PyTorch**  implementation of [**In-the-wild Material Appearance Editing using Perceptual Attributes**](). 
-
 
 [J. Daniel Subias](https://dsubias.github.io/#about)<sup>1</sup>,
 [Manuel Lagunas](https://mlagunas.me/)<sup>2</sup>
@@ -15,6 +14,7 @@ In **Eurographics 2023** (Oral Presentation)
 <img src='imgs/teaser.jpg'/>
 
 ## TL;DR Quickstart
+
 ```
 # Clone repository and enter in the folder
 git clone git@github.com:dsubias/in-the-wild_editing.git
