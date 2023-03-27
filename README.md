@@ -32,7 +32,7 @@ pip install -r requirements.txt
 python format_images.py
 
 # Run the editing framework
-editing_network.py -a glossy
+python editing_network.py -a glossy
 
 # Deactivate the python environment
 deactivate
