@@ -178,7 +178,7 @@ If you want to modify some hyper-parameters, please edit them in the configurati
 - `sample_step`: iteration steps per sampling operation.
 - `checkpoint_step`: iteration steps per checkpoint saving operation.
 
-## Cite arxiv (Temporal)
+## Cite (arxiv)
 
 If you use this work, please consider citing our paper with the following Bibtex code:
 
