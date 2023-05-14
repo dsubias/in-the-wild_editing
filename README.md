@@ -178,18 +178,19 @@ If you want to modify some hyper-parameters, please edit them in the configurati
 - `sample_step`: iteration steps per sampling operation.
 - `checkpoint_step`: iteration steps per checkpoint saving operation.
 
-## Cite (arxiv)
+## Cite
 
 If you use this work, please consider citing our paper with the following Bibtex code:
 
 ```
-@misc{subias2023inthewild,
-      title={In-the-wild Material Appearance Editing using Perceptual Attributes}, 
-      author={J. Daniel Subias and Manuel Lagunas},
-      year={2023},
-      eprint={2302.03619},
-      archivePrefix={arXiv},
-      primaryClass={cs.GR}
+@article {10.1111:cgf.14765,
+journal = {Computer Graphics Forum},
+title = {{In-the-wild Material Appearance Editing using Perceptual Attributes}},
+author = {Subías, José Daniel and Lagunas, Manuel},
+year = {2023},
+publisher = {The Eurographics Association and John Wiley & Sons Ltd.},
+ISSN = {1467-8659},
+DOI = {10.1111/cgf.14765}
 }
 ```
 
