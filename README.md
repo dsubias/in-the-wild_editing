@@ -1,6 +1,6 @@
 # In-the-wild Material Appearance Editing using Perceptual Attributes 
 
-### [![Project page](https://img.shields.io/badge/-Project%20page-blue)](https://dsubias.github.io/publication/in-the-wild_editing/) | [![Paper](https://img.shields.io/badge/Paper-PDF-red)](https://arxiv.org/pdf/2302.03619.pdf) | [![Data](https://img.shields.io/badge/-Data-yellowgreen)](https://drive.google.com/drive/folders/10qsYxPXR4cperbbkzmMNM0MKGNpj3kSx?usp=share_link)
+### [![Project page](https://img.shields.io/badge/-Project%20page-blue)](https://dsubias.github.io/publication/in-the-wild_editing/) | [![Paper]([https://img.shields.io/badge/Paper-PDF-red](https://diglib.eg.org/bitstream/handle/10.1111/cgf14765/v42i2pp333-345_cgf14765.pdf))](https://arxiv.org/pdf/2302.03619.pdf) | [![Data](https://img.shields.io/badge/-Data-yellowgreen)](https://drive.google.com/drive/folders/10qsYxPXR4cperbbkzmMNM0MKGNpj3kSx?usp=share_link)
 
 The official **PyTorch**  implementation of [**In-the-wild Material Appearance Editing using Perceptual Attributes**](). 
 
