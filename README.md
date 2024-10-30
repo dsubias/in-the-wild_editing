@@ -94,11 +94,11 @@ To do this, you can copy the original RGB image (e.g in format `JPEG`) in `origi
 python format_images.py
 ```
 
-This command resizes the RGB images and the alpha channels to 256x256 px. and outputs the final masked images in format `PNG`. You can download the rest of real data used in the paper [here](https://drive.google.com/file/d/1qGT4KHNapFnYPGVg6-1x97oJKnsckdU7/view?usp=share_link). 
+This command resizes the RGB images and the alpha channels to 256x256 px. and outputs the final masked images in format `PNG`. You can download the rest of real data used in the paper [here](https://nas-graphics.unizar.es/s/3Rz9P4fLWws8bW8). 
 
 ## Video Editing
 
-You can also edit a video by coping its frames in `frames` using the same format presente above, you can download an example [here](https://drive.google.com/file/d/1_lP7f0BueNwrxpOALa9whiorImj53DsX/view?usp=share_link). The run the following comand:
+You can also edit a video by coping its frames in `frames` using the same format presente above, you can download an example [here](https://nas-graphics.unizar.es/s/KbSaTgxYzRZCZfj). The run the following comand:
 
 ```
 editing_network.py -v True
@@ -121,7 +121,7 @@ If everything works without errors,  you can now go to `edited_video` and watch 
 
 ## Training
 
-Download the training data [here](https://drive.google.com/file/d/1Z5wEFox1fWaBqmwMskShkzBudyc_dWdU/view?usp=share_link) and move them to `data`. For quickly start to train a model, you can simply use the following command:
+Download the training data [here](https://nas-graphics.unizar.es/s/pLn9JGEtX6QcZSD) and move them to `data`. For quickly start to train a model, you can simply use the following command:
 
 ```
 python train_network.py 
